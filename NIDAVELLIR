@@ -8,6 +8,7 @@ local HttpService = game:GetService("HttpService")
 local OutfitToken = 0
 local SkinToken = 0
 local LightingLoop = nil
+local TargetClockTime = nil
 local CurrentShirt = ""
 local CurrentPants = ""
 local CurrentSkinColor = nil
@@ -202,6 +203,7 @@ local WEAPON_SKINS = {
 
 -- === LIGHTING OVERRIDE ===
 local function applyLighting(targetTime)
+    TargetClockTime = targetTime
     if LightingLoop then LightingLoop:Disconnect() end
     if targetTime == nil then
         Lighting.ClockTime = OriginalClockTime
@@ -235,7 +237,9 @@ local function applyUIHide()
         if ClientFrame then
             ClientFrame.Region.Visible = targetVisibility
             ClientFrame.RegionNote.Visible = targetVisibility
-            ClientFrame.Parent.ServerInfo.Visible = targetVisibility
+            if ClientFrame.Parent:FindFirstChild("ServerInfo") then
+                ClientFrame.Parent.ServerInfo.Visible = targetVisibility
+            end
         end
     end)
 end
@@ -335,13 +339,9 @@ RunService.RenderStepped:Connect(function()
             if not skinData then continue end
 
             local targets = {}
-            -- Equipped
             if char and char:FindFirstChild(baseWepName) then table.insert(targets, char[baseWepName]) end
-            -- Backpack
             if backpack and backpack:FindFirstChild(baseWepName) then table.insert(targets, backpack[baseWepName]) end
-            -- Display Items (Unequipped)
             if displayItems and displayItems:FindFirstChild(baseWepName) then table.insert(targets, displayItems[baseWepName]) end
-            -- ReplicatedStorage Display Models
             if repStorageModels and repStorageModels:FindFirstChild(baseWepName) then table.insert(targets, repStorageModels[baseWepName]) end
 
             for _, target in ipairs(targets) do
@@ -349,7 +349,6 @@ RunService.RenderStepped:Connect(function()
                     applyCustomWeaponSkin(target, skinData)
                     target:SetAttribute("CustomSkinApplied", activeSkinName)
                 else
-                    -- Verify game didn't override/delete the material after death
                     local mesh = target:FindFirstChildWhichIsA("MeshPart", true)
                     if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
                         applyCustomWeaponSkin(target, skinData)
@@ -509,6 +508,9 @@ local function onCharacterLoaded(char)
     if CurrentShirt ~= "" then applyOutfit(CurrentShirt, CurrentPants, IsResetState, char) end
     if CurrentSkinColor ~= nil then applySkin(CurrentSkinColor, false, char) end
     if CurrentAccArgs then applyAcc(char, CurrentAccArgs) end
+    -- Tool states apply via existing loops, but we force applying UI/Level
+    applyLevelHide()
+    applyUIHide()
 end
 
 Player.CharacterAdded:Connect(function(char)
@@ -572,8 +574,9 @@ ScreenGui.Name = "NIDAVELLIR_GUI"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 250, 0, 480)
-MainFrame.Position = UDim2.new(0.5, -125, 0.5, -240)
+-- Expanding GUI Size [cite: 220]
+MainFrame.Size = UDim2.new(0, 280, 0, 520) 
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -260)
 MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -658,7 +661,7 @@ local T2 = setupTab("SKIN", 2)
 local T3 = setupTab("TOOLS", 3)
 local T4 = setupTab("ACCS", 4)
 local T5 = setupTab("GUNS", 5)
-local T6 = setupTab("SAVED", 6)
+local T6 = setupTab("LOADOUTS", 6)
 
 -- Static Footer Buttons
 local ResetAvatarBtn = createBtn("RESET AVATAR", DarkBordeaux, MainFrame, function() applyOutfit(OriginalShirt, OriginalPants, true) end)
@@ -747,12 +750,16 @@ local skins = {
 for _, s in ipairs(skins) do createBtn(s[1], BordeauxColor, SkinP, function() applySkin(s[2], false) end) end
 
 -- === TOOLS TAB ===
-createBtn("HIDE LEVEL", BordeauxColor, ToolP, function() LevelHidden = not LevelHidden applyLevelHide() end)
+local function applyLevelBtn() LevelHidden = not LevelHidden applyLevelHide() end
+local function applyUIBtn() UIHidden = not UIHidden applyUIHide() end
+local function applyStatsBtn() StatsSpoofed = not StatsSpoofed applyStatsSpoof() end
+
+createBtn("HIDE LEVEL", BordeauxColor, ToolP, applyLevelBtn)
 createBtn("INFINITE YIELD", BordeauxColor, ToolP, function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() end)
 createBtn("NIGHTSHIFT", BordeauxColor, ToolP, function() applyLighting(0) end)
 createBtn("DAYSHIFT", BordeauxColor, ToolP, function() applyLighting(12) end)
-createBtn("UI OFF", BordeauxColor, ToolP, function() UIHidden = not UIHidden applyUIHide() end)
-createBtn("FPS HIDDEN", BordeauxColor, ToolP, function() StatsSpoofed = not StatsSpoofed applyStatsSpoof() end)
+createBtn("UI OFF", BordeauxColor, ToolP, applyUIBtn)
+createBtn("FPS HIDDEN", BordeauxColor, ToolP, applyStatsBtn)
 
 -- === ACCESSORIES TAB ===
 createBtn("CAT EARS", BordeauxColor, AccP, function() CurrentAccArgs = {"1374148", "413143035", -0.65, 0.15} applyAcc(Player.Character, CurrentAccArgs) end)
@@ -818,7 +825,7 @@ SaveNameBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 SaveNameBox.TextColor3 = Color3.new(1, 1, 1)
 SaveNameBox.Font = Enum.Font.GothamBold
 SaveNameBox.TextSize = 12
-SaveNameBox.PlaceholderText = "ENTER OUTFIT NAME..."
+SaveNameBox.PlaceholderText = "ENTER LOADOUT NAME..."
 SaveNameBox.Text = ""
 Instance.new("UICorner", SaveNameBox).CornerRadius = UDim.new(0, 6)
 
@@ -841,9 +848,11 @@ function loadSavedButtons()
         Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 6)
         
         loadBtn.MouseButton1Click:Connect(function()
+            -- Restore Outfit
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
             
+            -- Restore Accessory
             CurrentAccArgs = deserializeAccArgs(data.AccArgs)
             if CurrentAccArgs then 
                 applyAcc(Player.Character, CurrentAccArgs) 
@@ -855,12 +864,19 @@ function loadSavedButtons()
                 end
             end
             
+            -- Restore Weapons
             if data.WeaponSkins then
                 ActiveWeaponSkins = data.WeaponSkins
             else
                 ActiveWeaponSkins = {}
             end
             updateGunButtonsUI()
+            
+            -- Restore Tools (Level Hide, UI Hide, Stats Spoof, Day/Nightshift)
+            if data.LevelHidden ~= nil then LevelHidden = data.LevelHidden applyLevelHide() end
+            if data.UIHidden ~= nil then UIHidden = data.UIHidden applyUIHide() end
+            if data.StatsSpoofed ~= nil then StatsSpoofed = data.StatsSpoofed applyStatsSpoof() end
+            if data.ClockTime ~= nil then applyLighting(data.ClockTime) else applyLighting(nil) end
         end)
         
         local delBtn = Instance.new("TextButton", btnRow)
@@ -880,16 +896,20 @@ function loadSavedButtons()
     end
 end
 
-local SaveBtn = createBtn("SAVE CURRENT OUTFIT", DarkBordeaux, SavedTab, function()
+local SaveBtn = createBtn("SAVE CURRENT LOADOUT", DarkBordeaux, SavedTab, function()
     local n = SaveNameBox.Text
-    if n == "" then n = "OUTFIT " .. (#SavedOutfitsData + 1) end
+    if n == "" then n = "LOADOUT " .. (#SavedOutfitsData + 1) end
     table.insert(SavedOutfitsData, {
         Name = n,
         Shirt = CurrentShirt,
         Pants = CurrentPants,
         SkinColor = s_Col(CurrentSkinColor),
         AccArgs = serializeAccArgs(CurrentAccArgs),
-        WeaponSkins = ActiveWeaponSkins
+        WeaponSkins = ActiveWeaponSkins,
+        LevelHidden = LevelHidden,
+        UIHidden = UIHidden,
+        StatsSpoofed = StatsSpoofed,
+        ClockTime = TargetClockTime
     })
     writeSaves()
     loadSavedButtons()
