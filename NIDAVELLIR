@@ -574,7 +574,6 @@ ScreenGui.Name = "NIDAVELLIR_GUI"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
--- Expanding GUI Size [cite: 220]
 MainFrame.Size = UDim2.new(0, 280, 0, 520) 
 MainFrame.Position = UDim2.new(0.5, -140, 0.5, -260)
 MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -787,6 +786,18 @@ createBtn("CHICKEN SUIT", BordeauxColor, AccP, function()
 end)
 
 -- === GUNS TAB ===
+GunP.Size = UDim2.new(1, 0, 1, -40)
+local GunSearchBox = Instance.new("TextBox", GunTab)
+GunSearchBox.Size = UDim2.new(1, -5, 0, 32)
+GunSearchBox.Position = UDim2.new(0, 0, 1, -35)
+GunSearchBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+GunSearchBox.TextColor3 = Color3.new(1, 1, 1)
+GunSearchBox.Font = Enum.Font.GothamBold
+GunSearchBox.TextSize = 12
+GunSearchBox.PlaceholderText = "SEARCH GUN SKINS..."
+GunSearchBox.Text = ""
+Instance.new("UICorner", GunSearchBox).CornerRadius = UDim.new(0, 6)
+
 local gunButtons = {}
 
 local function updateGunButtonsUI()
@@ -815,6 +826,13 @@ for skinName, _ in pairs(WEAPON_SKINS) do
     end)
     gunButtons[skinName] = {Button = btn}
 end
+
+GunSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local searchText = string.lower(GunSearchBox.Text)
+    for skinName, data in pairs(gunButtons) do
+        data.Button.Visible = (searchText == "" or string.find(string.lower(skinName), searchText) ~= nil)
+    end
+end)
 
 -- === SAVED TAB ===
 SavedP.Size = UDim2.new(1, 0, 1, -75)
