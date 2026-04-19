@@ -160,20 +160,21 @@ local WEAPON_SKINS = {
         NormalMap = "rbxassetid://16040464100",
         RoughnessMap = "rbxassetid://16040464355"
     },
-    -- === NEWLY MERGED SKINS ===
-    ["Itacha hellfire"] = {
+    
+    -- === NEW SKINS ===
+    ["Ithaca-37 hellfire"] = {
         ColorMap = "rbxassetid://120094510362818",
         MetalnessMap = "rbxassetid://113748442311389",
         NormalMap = "rbxassetid://89491017367979",
         RoughnessMap = "rbxassetid://131860023245181"
     },
-    ["M4A1 aureus"] = {
+    ["M4A1-1 aureus"] = {
         ColorMap = "rbxassetid://13714578814",
         MetalnessMap = "rbxassetid://13714330861",
         NormalMap = "rbxassetid://13714331534",
         RoughnessMap = "rbxassetid://13714329843"
     },
-    ["M4A1 frostbite"] = {
+    ["M4A1-1 frostbite"] = {
         ColorMap = "rbxassetid://15695451364",
         MetalnessMap = "rbxassetid://15695450936",
         NormalMap = "rbxassetid://15695450725",
@@ -185,13 +186,13 @@ local WEAPON_SKINS = {
         NormalMap = "rbxassetid://15039147363",
         RoughnessMap = "rbxassetid://15039147120"
     },
-    ["FAL majesty"] = {
+    ["FN-FAL majesty"] = {
         ColorMap = "rbxassetid://12268008265",
         MetalnessMap = "rbxassetid://12267979022",
         NormalMap = "rbxassetid://12267979962",
         RoughnessMap = "rbxassetid://12267980974"
     },
-    ["FNP bloodshot"] = {
+    ["FNP-45 bloodshot"] = {
         ColorMap = "rbxassetid://13566118019",
         MetalnessMap = "rbxassetid://13566119175",
         NormalMap = "rbxassetid://13566120150",
@@ -317,9 +318,9 @@ end
 RunService.RenderStepped:Connect(function()
     pcall(function()
         local char = Player.Character
+        local backpack = Player:FindFirstChild("Backpack")
         local customCharsFolder = workspace:FindFirstChild("Characters")
         
-        -- Multi-fallback check for the display folder to ensure it works for everyone
         local charName = char and char.Name or Player.Name
         local myCustomCharFolder = customCharsFolder and (
             customCharsFolder:FindFirstChild(charName) or 
@@ -327,55 +328,31 @@ RunService.RenderStepped:Connect(function()
             customCharsFolder:FindFirstChild(Player.DisplayName)
         )
         local displayItems = myCustomCharFolder and myCustomCharFolder:FindFirstChild("DisplayItems")
+        local repStorageModels = game:GetService("ReplicatedStorage"):FindFirstChild("Storage") and game:GetService("ReplicatedStorage").Storage:FindFirstChild("DisplayWepModels")
 
         for baseWepName, activeSkinName in pairs(ActiveWeaponSkins) do
             local skinData = WEAPON_SKINS[activeSkinName]
             if not skinData then continue end
 
-            -- 1. Apply to Equipped Weapons
-            if char then
-                local equippedWep = char:FindFirstChild(baseWepName)
-                if equippedWep then
-                    local needsSkin = false
-                    if equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
-                        needsSkin = true
-                    else
-                        -- Verify game didn't override/delete the material after death on ANY MeshPart
-                        for _, part in ipairs(equippedWep:GetDescendants()) do
-                            if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
-                                needsSkin = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if needsSkin then
-                        applyCustomWeaponSkin(equippedWep, skinData)
-                        equippedWep:SetAttribute("CustomSkinApplied", activeSkinName)
-                    end
-                end
-            end
+            local targets = {}
+            -- Equipped
+            if char and char:FindFirstChild(baseWepName) then table.insert(targets, char[baseWepName]) end
+            -- Backpack
+            if backpack and backpack:FindFirstChild(baseWepName) then table.insert(targets, backpack[baseWepName]) end
+            -- Display Items (Unequipped)
+            if displayItems and displayItems:FindFirstChild(baseWepName) then table.insert(targets, displayItems[baseWepName]) end
+            -- ReplicatedStorage Display Models
+            if repStorageModels and repStorageModels:FindFirstChild(baseWepName) then table.insert(targets, repStorageModels[baseWepName]) end
 
-            -- 2. Apply to Unequipped Weapons (in the custom DisplayItems folder)
-            if displayItems then
-                local stowedWep = displayItems:FindFirstChild(baseWepName)
-                if stowedWep then
-                    local needsSkin = false
-                    if stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
-                        needsSkin = true
-                    else
-                        -- Verify game didn't override/delete the material after death on ANY MeshPart
-                        for _, part in ipairs(stowedWep:GetDescendants()) do
-                            if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
-                                needsSkin = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if needsSkin then
-                        applyCustomWeaponSkin(stowedWep, skinData)
-                        stowedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+            for _, target in ipairs(targets) do
+                if target:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                    applyCustomWeaponSkin(target, skinData)
+                    target:SetAttribute("CustomSkinApplied", activeSkinName)
+                else
+                    -- Verify game didn't override/delete the material after death
+                    local mesh = target:FindFirstChildWhichIsA("MeshPart", true)
+                    if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
+                        applyCustomWeaponSkin(target, skinData)
                     end
                 end
             end
@@ -391,7 +368,6 @@ local function applyAcc(char, args)
         local head = char:WaitForChild("Head", 5)
         if not head then return end
         
-        -- Wait for native Roblox hats to finish loading so they don't break our custom weld
         task.wait(0.8)
         
         for _, v in ipairs(char:GetChildren()) do if v.Name == "NidavellirCustomAcc" then v:Destroy() end end
@@ -424,7 +400,6 @@ local function applyAcc(char, args)
             fire.SecondaryColor = fire.Color
         end
 
-        -- Chicken Suit Special Sound Logic
         if mID == "24101267" or mID == "rbxassetid://24101267" then
             local s1 = Instance.new("Sound", handle) s1.SoundId = "rbxassetid://24111685" s1.Volume = 1
             local s2 = Instance.new("Sound", handle) s2.SoundId = "rbxassetid://24111782" s2.Volume = 1
@@ -537,14 +512,12 @@ local function onCharacterLoaded(char)
 end
 
 Player.CharacterAdded:Connect(function(char)
-    -- Fallback in case custom character models don't trigger CharacterAppearanceLoaded
     task.delay(1.5, function()
         if char and char.Parent then onCharacterLoaded(char) end
     end)
 end)
 
 Player.CharacterAppearanceLoaded:Connect(function(char)
-    -- This reliably fires when native Roblox accessories are successfully loaded
     task.wait(0.2)
     onCharacterLoaded(char)
 end)
@@ -808,6 +781,20 @@ end)
 
 -- === GUNS TAB ===
 local gunButtons = {}
+
+local function updateGunButtonsUI()
+    for name, data in pairs(gunButtons) do
+        local base = string.split(name, " ")[1]
+        if ActiveWeaponSkins[base] == name then
+            data.Button.Text = name:upper() .. ": ON"
+            data.Button.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+        else
+            data.Button.Text = name:upper() .. ": OFF"
+            data.Button.BackgroundColor3 = BordeauxColor
+        end
+    end
+end
+
 for skinName, _ in pairs(WEAPON_SKINS) do
     local baseWepName = string.split(skinName, " ")[1] 
     local btn
@@ -817,17 +804,7 @@ for skinName, _ in pairs(WEAPON_SKINS) do
         else
             ActiveWeaponSkins[baseWepName] = skinName
         end
-
-        for name, data in pairs(gunButtons) do
-            local base = string.split(name, " ")[1]
-            if ActiveWeaponSkins[base] == name then
-                data.Button.Text = name:upper() .. ": ON"
-                data.Button.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
-            else
-                data.Button.Text = name:upper() .. ": OFF"
-                data.Button.BackgroundColor3 = BordeauxColor
-            end
-        end
+        updateGunButtonsUI()
     end)
     gunButtons[skinName] = {Button = btn}
 end
@@ -867,7 +844,6 @@ function loadSavedButtons()
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
             
-            -- FIX: Properly track and update accessory state on load
             CurrentAccArgs = deserializeAccArgs(data.AccArgs)
             if CurrentAccArgs then 
                 applyAcc(Player.Character, CurrentAccArgs) 
@@ -878,6 +854,13 @@ function loadSavedButtons()
                     end 
                 end
             end
+            
+            if data.WeaponSkins then
+                ActiveWeaponSkins = data.WeaponSkins
+            else
+                ActiveWeaponSkins = {}
+            end
+            updateGunButtonsUI()
         end)
         
         local delBtn = Instance.new("TextButton", btnRow)
@@ -905,7 +888,8 @@ local SaveBtn = createBtn("SAVE CURRENT OUTFIT", DarkBordeaux, SavedTab, functio
         Shirt = CurrentShirt,
         Pants = CurrentPants,
         SkinColor = s_Col(CurrentSkinColor),
-        AccArgs = serializeAccArgs(CurrentAccArgs)
+        AccArgs = serializeAccArgs(CurrentAccArgs),
+        WeaponSkins = ActiveWeaponSkins
     })
     writeSaves()
     loadSavedButtons()
