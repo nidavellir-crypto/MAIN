@@ -108,6 +108,7 @@ local WEAPON_SKINS = {
         RoughnessMap = "rbxassetid://13030812846"
     },
     ["G-17 elim"] = {
+        IsSpecial = "G17_Elim",
         ColorMap = "rbxassetid://94164067871562",
         MetalnessMap = "rbxassetid://133337669834230",
         NormalMap = "rbxassetid://75074216652378",
@@ -144,6 +145,7 @@ local WEAPON_SKINS = {
         RoughnessMap = "rbxassetid://16355308060"
     },
     ["Mare trickshot"] = {
+        IsSpecial = "Mare_Trickshot", -- NEW: Added special flag for sound mod
         ColorMap = "rbxassetid://16907785827",
         MetalnessMap = "rbxassetid://16907786165",
         NormalMap = "rbxassetid://16907787618",
@@ -298,6 +300,123 @@ end
 -- === WEAPON SKIN LOGIC ===
 local function applyCustomWeaponSkin(weapon, skinData)
     local applied = false
+
+    -- === ADVANCED LOGIC: G-17 ELIMINATION MOD ===
+    if skinData.IsSpecial == "G17_Elim" then
+        local SOUNDS = {
+            Fire = "rbxassetid://3466984142",
+            ReloadSlide = "rbxassetid://86227568494434",
+        }
+        local FIRE_SETTINGS = { PlaybackSpeed = 2.3, Volume = 0.8 }
+        local RELOAD_SETTINGS = { PlaybackSpeed = 1.1, Volume = 1.5 }
+        local BULLET_COLOR = Color3.fromRGB(175, 130, 140)
+        local SIGHT_COLOR = Color3.fromRGB(255, 0, 127)
+
+        for _, v in ipairs(weapon:GetDescendants()) do
+            -- 1. MESH & MATERIAL LOGIC
+            if v:IsA("MeshPart") or v:IsA("Part") then
+                local name = v.Name:lower()
+                
+                -- Clear old textures/SurfaceAppearances
+                for _, child in ipairs(v:GetChildren()) do
+                    if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
+                        child:Destroy()
+                    end
+                end
+
+                -- A. Check for Ironsights
+                if name:find("sight") or name:find("iron") or name:find("dot") then
+                    v.Color = SIGHT_COLOR
+                    v.Material = Enum.Material.Neon
+                    v.Transparency = 0
+                    
+                -- B. Check for Ghost Parts (Slide & Barrel)
+                elseif name:find("slide") or name:find("barrel") then
+                    v.Color = Color3.new(0, 0, 0) -- Pure Black
+                    v.Transparency = 0.4          -- See-through
+                    v.Material = Enum.Material.Plastic
+                    
+                -- C. Everything else (Frame/Body) gets the Skin
+                else
+                    if v:IsA("MeshPart") then
+                        local sa = Instance.new("SurfaceAppearance")
+                        sa.Name = "Custom_SurfaceAppearance"
+                        sa.ColorMap = skinData.ColorMap
+                        sa.MetalnessMap = skinData.MetalnessMap
+                        sa.NormalMap = skinData.NormalMap
+                        sa.RoughnessMap = skinData.RoughnessMap
+                        sa.Parent = v
+                    end
+                    v.Transparency = 0
+                end
+                applied = true
+                
+            -- 2. SOUND LOGIC
+            elseif v:IsA("Sound") then
+                local soundName = v.Name:lower()
+                if soundName:find("fire") or soundName:find("shot") then
+                    v.SoundId = SOUNDS.Fire
+                    v.PlaybackSpeed = FIRE_SETTINGS.PlaybackSpeed
+                    v.Volume = FIRE_SETTINGS.Volume
+                elseif soundName:find("slide") or soundName:find("pull") or soundName:find("chamber") then
+                    v.SoundId = SOUNDS.ReloadSlide
+                    v.PlaybackSpeed = RELOAD_SETTINGS.PlaybackSpeed
+                    v.Volume = RELOAD_SETTINGS.Volume
+                end
+
+            -- 3. BULLET & SHELL LOGIC
+            elseif v:IsA("BasePart") then
+                if v.Name:lower():find("shell") or v.Name:lower():find("bullet") then
+                    v.Color = BULLET_COLOR
+                    v.Material = Enum.Material.Neon
+                    if v:IsA("MeshPart") then v.TextureID = "" end
+                    local sa = v:FindFirstChildOfClass("SurfaceAppearance")
+                    if sa then sa:Destroy() end
+                end
+            end
+        end
+        return applied
+
+    -- === ADVANCED LOGIC: MARE TRICKSHOT SOUND MOD ===
+    elseif skinData.IsSpecial == "Mare_Trickshot" then
+        local SOUNDS = {
+            Fire = "rbxassetid://5033272182",
+        }
+        -- Adjust these values if you want it faster/slower/louder
+        local FIRE_SETTINGS = { PlaybackSpeed = 1.0, Volume = 1.5 } 
+
+        for _, v in ipairs(weapon:GetDescendants()) do
+            -- 1. APPLY SKIN
+            if v:IsA("MeshPart") then
+                for _, child in ipairs(v:GetChildren()) do
+                    if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
+                        child:Destroy()
+                    end
+                end
+                local sa = Instance.new("SurfaceAppearance")
+                sa.Name = "Custom_SurfaceAppearance"
+                sa.ColorMap = skinData.ColorMap
+                sa.MetalnessMap = skinData.MetalnessMap
+                sa.NormalMap = skinData.NormalMap
+                sa.RoughnessMap = skinData.RoughnessMap
+                sa.Parent = v
+                applied = true
+            end
+                
+            -- 2. SOUND LOGIC
+            if v:IsA("Sound") then
+                local soundName = v.Name:lower()
+                if soundName:find("fire") or soundName:find("shot") then
+                    v.SoundId = SOUNDS.Fire
+                    v.PlaybackSpeed = FIRE_SETTINGS.PlaybackSpeed
+                    v.Volume = FIRE_SETTINGS.Volume
+                end
+            end
+        end
+        return applied
+    end
+
+    -- === STANDARD SKIN LOGIC (Fallback for everything else) ===
     for _, part in ipairs(weapon:GetDescendants()) do
         if part:IsA("MeshPart") then
             for _, child in ipairs(part:GetChildren()) do
@@ -825,6 +944,7 @@ end
 for skinName, _ in pairs(WEAPON_SKINS) do
     local baseWepName = string.split(skinName, " ")[1] 
     local btn
+    
     btn = createBtn(skinName:upper() .. ": OFF", BordeauxColor, GunP, function()
         if ActiveWeaponSkins[baseWepName] == skinName then
             ActiveWeaponSkins[baseWepName] = nil
