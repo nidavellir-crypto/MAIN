@@ -29,6 +29,7 @@ task.spawn(function()
     local s = char:FindFirstChildOfClass("Shirt") or char:WaitForChild("Shirt", 1.5)
     local p = char:FindFirstChildOfClass("Pants") or char:WaitForChild("Pants", 1.5)
     local bc = char:FindFirstChildOfClass("BodyColors") or char:WaitForChild("BodyColors", 1.5)
+    
     if s and OriginalShirt == "" then OriginalShirt = s.ShirtTemplate end
     if p and OriginalPants == "" then OriginalPants = p.PantsTemplate end
     if bc and not OriginalBodyColors then OriginalBodyColors = bc:Clone() end
@@ -111,8 +112,6 @@ local WEAPON_SKINS = {
         NormalMap = "rbxassetid://75074216652378",
         RoughnessMap = "rbxassetid://112379003610843"
     },
-    
-    -- === NEW SKINS ADDED HERE ===
     ["Deagle nacho"] = {
         ColorMap = "rbxassetid://16942393059",
         MetalnessMap = "rbxassetid://13937635046",
@@ -256,6 +255,7 @@ end
 
 -- === WEAPON SKIN LOGIC ===
 local function applyCustomWeaponSkin(weapon, skinData)
+    local applied = false
     for _, part in ipairs(weapon:GetDescendants()) do
         if part:IsA("MeshPart") then
             for _, child in ipairs(part:GetChildren()) do
@@ -271,37 +271,61 @@ local function applyCustomWeaponSkin(weapon, skinData)
             sa.RoughnessMap = skinData.RoughnessMap
             sa.AlphaMode = Enum.AlphaMode.Overlay
             sa.Parent = part
+            applied = true
         end
     end
+    return applied
 end
 
 RunService.RenderStepped:Connect(function()
     pcall(function()
         local char = Player.Character
-        -- Grab the custom holstered items path: workspace.Characters.[PlayerName].DisplayItems
         local customCharsFolder = workspace:FindFirstChild("Characters")
-        local myCustomCharFolder = customCharsFolder and customCharsFolder:FindFirstChild(Player.Name)
+        
+        -- Multi-fallback check for the display folder to ensure it works for everyone
+        local charName = char and char.Name or Player.Name
+        local myCustomCharFolder = customCharsFolder and (
+            customCharsFolder:FindFirstChild(charName) or 
+            customCharsFolder:FindFirstChild(Player.Name) or 
+            customCharsFolder:FindFirstChild(Player.DisplayName)
+        )
         local displayItems = myCustomCharFolder and myCustomCharFolder:FindFirstChild("DisplayItems")
 
         for baseWepName, activeSkinName in pairs(ActiveWeaponSkins) do
             local skinData = WEAPON_SKINS[activeSkinName]
             if not skinData then continue end
 
-            -- 1. Apply to Equipped Weapons (in standard Character)
+            -- 1. Apply to Equipped Weapons
             if char then
                 local equippedWep = char:FindFirstChild(baseWepName)
-                if equippedWep and equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
-                    applyCustomWeaponSkin(equippedWep, skinData)
-                    equippedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                if equippedWep then
+                    if equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                        applyCustomWeaponSkin(equippedWep, skinData)
+                        equippedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                    else
+                        -- Verify game didn't override/delete the material after death
+                        local mesh = equippedWep:FindFirstChildWhichIsA("MeshPart", true)
+                        if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
+                            applyCustomWeaponSkin(equippedWep, skinData)
+                        end
+                    end
                 end
             end
 
             -- 2. Apply to Unequipped Weapons (in the custom DisplayItems folder)
             if displayItems then
                 local stowedWep = displayItems:FindFirstChild(baseWepName)
-                if stowedWep and stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
-                    applyCustomWeaponSkin(stowedWep, skinData)
-                    stowedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                if stowedWep then
+                    if stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                        applyCustomWeaponSkin(stowedWep, skinData)
+                        stowedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                    else
+                        -- Verify game didn't override/delete the material after death
+                        local mesh = stowedWep:FindFirstChildWhichIsA("MeshPart", true)
+                        if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
+                            applyCustomWeaponSkin(stowedWep, skinData)
+                        end
+                    end
                 end
             end
         end
@@ -790,7 +814,18 @@ function loadSavedButtons()
         loadBtn.MouseButton1Click:Connect(function()
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
-            if data.AccArgs then applyAcc(Player.Character, deserializeAccArgs(data.AccArgs)) end
+            
+            -- FIX: Properly track and update accessory state on load
+            CurrentAccArgs = deserializeAccArgs(data.AccArgs)
+            if CurrentAccArgs then 
+                applyAcc(Player.Character, CurrentAccArgs) 
+            else
+                if Player.Character then 
+                    for _, v in pairs(Player.Character:GetChildren()) do 
+                        if v.Name == "NidavellirCustomAcc" then v:Destroy() end 
+                    end 
+                end
+            end
         end)
         
         local delBtn = Instance.new("TextButton", btnRow)
