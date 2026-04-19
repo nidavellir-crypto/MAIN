@@ -1,0 +1,844 @@
+local Player = game:GetService("Players").LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+
+-- === STATE TRACKING ===
+local OutfitToken = 0
+local SkinToken = 0
+local LightingLoop = nil
+local CurrentShirt = ""
+local CurrentPants = ""
+local CurrentSkinColor = nil
+local IsResetState = true
+local CurrentAccArgs = nil
+local LevelHidden = false
+local UIHidden = false
+local StatsSpoofed = false
+local StatsSpoofConnection = nil
+
+-- Save Originals
+local OriginalShirt = ""
+local OriginalPants = ""
+local OriginalBodyColors = nil
+local OriginalClockTime = Lighting.ClockTime
+
+task.spawn(function()
+    local char = Player.Character or Player.CharacterAdded:Wait()
+    local s = char:FindFirstChildOfClass("Shirt") or char:WaitForChild("Shirt", 1.5)
+    local p = char:FindFirstChildOfClass("Pants") or char:WaitForChild("Pants", 1.5)
+    local bc = char:FindFirstChildOfClass("BodyColors") or char:WaitForChild("BodyColors", 1.5)
+    if s and OriginalShirt == "" then OriginalShirt = s.ShirtTemplate end
+    if p and OriginalPants == "" then OriginalPants = p.PantsTemplate end
+    if bc and not OriginalBodyColors then OriginalBodyColors = bc:Clone() end
+end)
+
+-- === GUN SKIN DATA ===
+local ActiveWeaponSkins = {} 
+
+-- Names must start with the exact Tool Name (e.g., "MAC-10", "Sawn-Off")
+local WEAPON_SKINS = {
+    ["Deagle gold"] = {
+        ColorMap = "rbxassetid://9422465914",
+        MetalnessMap = "rbxassetid://9422467019",
+        NormalMap = "rbxassetid://9368506864",
+        RoughnessMap = "rbxassetid://9422469052"
+    },
+    ["M4A1-1 PATRIOT"] = {
+        ColorMap = "rbxassetid://13945985275",
+        MetalnessMap = "rbxassetid://13945986111",
+        NormalMap = "rbxassetid://13945989865",
+        RoughnessMap = "rbxassetid://13945990897"
+    },
+    ["M4A1-1 MELT"] = {
+        ColorMap = "rbxassetid://138263153339452",
+        MetalnessMap = "rbxassetid://122701374554312",
+        NormalMap = "rbxassetid://92873024476028",
+        RoughnessMap = "rbxassetid://77602151073625"
+    },
+    ["Mare gold"] = {
+        ColorMap = "rbxassetid://16560241772",
+        MetalnessMap = "rbxassetid://8969034988",
+        NormalMap = "rbxassetid://8969047074",
+        RoughnessMap = "rbxassetid://8969056777"
+    },
+    ["MP7 hell"] = {
+        ColorMap = "rbxassetid://13842812065",
+        MetalnessMap = "rbxassetid://13841892618",
+        NormalMap = "rbxassetid://13841893577",
+        RoughnessMap = "rbxassetid://13841894868"
+    },
+    ["Uzi smiley"] = {
+        ColorMap = "rbxassetid://13841666943",
+        MetalnessMap = "rbxassetid://13841669024",
+        NormalMap = "rbxassetid://13841669834",
+        RoughnessMap = "rbxassetid://13715505740"
+    },
+    ["Beretta gold"] = {
+        ColorMap = "rbxassetid://15071881699",
+        MetalnessMap = "rbxassetid://15071881490",
+        NormalMap = "rbxassetid://15071881251",
+        RoughnessMap = "rbxassetid://15071880826"
+    },
+    ["AKS-74U cherry"] = {
+        ColorMap = "rbxassetid://16355374224",
+        MetalnessMap = "rbxassetid://16355374709",
+        NormalMap = "rbxassetid://16355375244",
+        RoughnessMap = "rbxassetid://16355375483"
+    },
+    ["SKS jester"] = {
+        ColorMap = "rbxassetid://13343167267",
+        MetalnessMap = "rbxassetid://13343167958",
+        NormalMap = "rbxassetid://13343168956",
+        RoughnessMap = "rbxassetid://13343169804"
+    },
+    ["M1911 glory"] = {
+        ColorMap = "rbxassetid://13948805827",
+        MetalnessMap = "rbxassetid://13948290980",
+        NormalMap = "rbxassetid://13948291596",
+        RoughnessMap = "rbxassetid://13948321939"
+    },
+    ["Sawn-Off glacial"] = {
+        ColorMap = "rbxassetid://13030805318",
+        MetalnessMap = "rbxassetid://13030809551",
+        NormalMap = "rbxassetid://13030811843",
+        RoughnessMap = "rbxassetid://13030812846"
+    },
+    ["G-17 elim"] = {
+        ColorMap = "rbxassetid://94164067871562",
+        MetalnessMap = "rbxassetid://133337669834230",
+        NormalMap = "rbxassetid://75074216652378",
+        RoughnessMap = "rbxassetid://112379003610843"
+    },
+    
+    -- === NEW SKINS ADDED HERE ===
+    ["Deagle nacho"] = {
+        ColorMap = "rbxassetid://16942393059",
+        MetalnessMap = "rbxassetid://13937635046",
+        NormalMap = "rbxassetid://13935410021",
+        RoughnessMap = "rbxassetid://13935410676"
+    },
+    ["SKS jacko"] = {
+        ColorMap = "rbxassetid://15177197176",
+        MetalnessMap = "rbxassetid://15177198090",
+        NormalMap = "rbxassetid://15177203653",
+        RoughnessMap = "rbxassetid://15177204339"
+    },
+    ["Sawn-Off grandprix"] = {
+        ColorMap = "rbxassetid://13841748041",
+        MetalnessMap = "rbxassetid://13841749691",
+        NormalMap = "rbxassetid://13841750446",
+        RoughnessMap = "rbxassetid://13556254787"
+    },
+    ["UMP-45 daejing"] = {
+        ColorMap = "rbxassetid://125942364208210",
+        MetalnessMap = "rbxassetid://98525310658486",
+        NormalMap = "rbxassetid://80254908603579",
+        RoughnessMap = "rbxassetid://112502290266633"
+    },
+    ["Magnum amour"] = {
+        ColorMap = "rbxassetid://16355307379",
+        MetalnessMap = "rbxassetid://16355307601",
+        NormalMap = "rbxassetid://16355307807",
+        RoughnessMap = "rbxassetid://16355308060"
+    },
+    ["Mare trickshot"] = {
+        ColorMap = "rbxassetid://16907785827",
+        MetalnessMap = "rbxassetid://16907786165",
+        NormalMap = "rbxassetid://16907787618",
+        RoughnessMap = "rbxassetid://16907788208"
+    },
+    ["MAC-10 cryofox"] = {
+        ColorMap = "rbxassetid://72676229182235",
+        MetalnessMap = "rbxassetid://99722143158841",
+        NormalMap = "rbxassetid://98358790768254",
+        RoughnessMap = "rbxassetid://75331173382652"
+    },
+    ["G-17 yosei"] = {
+        ColorMap = "rbxassetid://16040462957",
+        MetalnessMap = "rbxassetid://16040463384",
+        NormalMap = "rbxassetid://16040464100",
+        RoughnessMap = "rbxassetid://16040464355"
+    }
+}
+
+-- === LIGHTING OVERRIDE ===
+local function applyLighting(targetTime)
+    if LightingLoop then LightingLoop:Disconnect() end
+    if targetTime == nil then
+        Lighting.ClockTime = OriginalClockTime
+        return
+    end
+    LightingLoop = RunService.RenderStepped:Connect(function()
+        Lighting.ClockTime = targetTime
+    end)
+end
+
+-- === TOOL FUNCTIONS ===
+local function applyLevelHide()
+    pcall(function()
+        local core = Player.PlayerGui:FindFirstChild("CoreGUI")
+        if core and core:FindFirstChild("LevelFrame") then
+            core.LevelFrame.Visible = not LevelHidden
+        end
+    end)
+end
+
+local function applyUIHide()
+    local targetVisibility = not UIHidden
+    pcall(function()
+        local CG = game:GetService("CoreGui")
+        local TopBar = CG:FindFirstChild("TopBarApp")
+        if TopBar then
+            TopBar.TopBarApp.UnibarLeftFrame.UnibarMenu.Visible = targetVisibility
+            TopBar.TopBarApp.MenuIconHolder.TriggerPoint.Visible = targetVisibility
+        end
+        local ClientFrame = Player.PlayerGui:FindFirstChild("CoreGUI") and Player.PlayerGui.CoreGUI:FindFirstChild("ClientFrame")
+        if ClientFrame then
+            ClientFrame.Region.Visible = targetVisibility
+            ClientFrame.RegionNote.Visible = targetVisibility
+            ClientFrame.Parent.ServerInfo.Visible = targetVisibility
+        end
+    end)
+end
+
+local function applyStatsSpoof()
+    if StatsSpoofConnection then
+        StatsSpoofConnection:Disconnect()
+        StatsSpoofConnection = nil
+    end
+
+    if StatsSpoofed then
+        StatsSpoofConnection = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                local ClientFrame = Player.PlayerGui.CoreGUI.ClientFrame
+                for _, original in ipairs(ClientFrame:GetDescendants()) do
+                    if original:IsA("TextLabel") and not original:GetAttribute("NidavellirFake") then
+                        local text = original.Text:lower()
+                        if text:find("fps") then
+                            original.TextTransparency = 1 
+                            local fakeName = original.Name .. "_Shadow"
+                            local shadow = original.Parent:FindFirstChild(fakeName)
+                            if not shadow then
+                                shadow = original:Clone()
+                                shadow.Name = fakeName
+                                shadow:SetAttribute("NidavellirFake", true)
+                                shadow.Parent = original.Parent
+                            end
+                            shadow.Visible = true
+                            shadow.TextTransparency = 0
+                            shadow.Position = original.Position
+                            shadow.Size = original.Size
+                            shadow.Font = original.Font 
+                            shadow.RichText = true
+                            shadow.Text = "FPS: <b>999</b>"
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        pcall(function()
+            local ClientFrame = Player.PlayerGui.CoreGUI.ClientFrame
+            for _, v in ipairs(ClientFrame:GetDescendants()) do
+                if v:IsA("TextLabel") then
+                    if v:GetAttribute("NidavellirFake") then
+                        v:Destroy()
+                    else
+                        v.TextTransparency = 0
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- === WEAPON SKIN LOGIC ===
+local function applyCustomWeaponSkin(weapon, skinData)
+    for _, part in ipairs(weapon:GetDescendants()) do
+        if part:IsA("MeshPart") then
+            for _, child in ipairs(part:GetChildren()) do
+                if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
+                    child:Destroy()
+                end
+            end
+            local sa = Instance.new("SurfaceAppearance")
+            sa.Name = "Custom_SurfaceAppearance"
+            sa.ColorMap = skinData.ColorMap
+            sa.MetalnessMap = skinData.MetalnessMap
+            sa.NormalMap = skinData.NormalMap
+            sa.RoughnessMap = skinData.RoughnessMap
+            sa.AlphaMode = Enum.AlphaMode.Overlay
+            sa.Parent = part
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        local char = Player.Character
+        -- Grab the custom holstered items path: workspace.Characters.[PlayerName].DisplayItems
+        local customCharsFolder = workspace:FindFirstChild("Characters")
+        local myCustomCharFolder = customCharsFolder and customCharsFolder:FindFirstChild(Player.Name)
+        local displayItems = myCustomCharFolder and myCustomCharFolder:FindFirstChild("DisplayItems")
+
+        for baseWepName, activeSkinName in pairs(ActiveWeaponSkins) do
+            local skinData = WEAPON_SKINS[activeSkinName]
+            if not skinData then continue end
+
+            -- 1. Apply to Equipped Weapons (in standard Character)
+            if char then
+                local equippedWep = char:FindFirstChild(baseWepName)
+                if equippedWep and equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                    applyCustomWeaponSkin(equippedWep, skinData)
+                    equippedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                end
+            end
+
+            -- 2. Apply to Unequipped Weapons (in the custom DisplayItems folder)
+            if displayItems then
+                local stowedWep = displayItems:FindFirstChild(baseWepName)
+                if stowedWep and stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                    applyCustomWeaponSkin(stowedWep, skinData)
+                    stowedWep:SetAttribute("CustomSkinApplied", activeSkinName)
+                end
+            end
+        end
+    end)
+end)
+
+-- === ACCESSORY LOGIC ===
+local function applyAcc(char, args)
+    if not char or not args then return end
+
+    task.spawn(function()
+        local head = char:WaitForChild("Head", 5)
+        if not head then return end
+        
+        -- Wait for native Roblox hats to finish loading so they don't break our custom weld
+        task.wait(0.8)
+        
+        for _, v in ipairs(char:GetChildren()) do if v.Name == "NidavellirCustomAcc" then v:Destroy() end end
+
+        local mID = args[1]
+        local tID = args[2]
+        local yOff = args[3] or 0
+        local zOff = args[4] or 0
+        local scale = args[5] or Vector3.new(1,1,1)
+        local fireData = args[6]
+
+        local handle = Instance.new("Part")
+        handle.Name = "NidavellirCustomAcc"
+        handle.Size = Vector3.new(1, 1, 1)
+        handle.CanCollide = false
+        handle.Massless = true
+        handle.Parent = char
+
+        local mesh = Instance.new("SpecialMesh", handle)
+        mesh.MeshType = Enum.MeshType.FileMesh
+        mesh.MeshId = mID:find("rbxassetid") and mID or "rbxassetid://" .. mID
+        mesh.TextureId = tID:find("rbxassetid") and tID or "rbxassetid://" .. tID
+        mesh.Scale = scale
+
+        if fireData then
+            local fire = Instance.new("Fire", handle)
+            fire.Size = 4
+            fire.Heat = fireData.Heat or 5
+            fire.Color = fireData.Color or Color3.fromRGB(52, 206, 236)
+            fire.SecondaryColor = fire.Color
+        end
+
+        -- Chicken Suit Special Sound Logic
+        if mID == "24101267" or mID == "rbxassetid://24101267" then
+            local s1 = Instance.new("Sound", handle) s1.SoundId = "rbxassetid://24111685" s1.Volume = 1
+            local s2 = Instance.new("Sound", handle) s2.SoundId = "rbxassetid://24111782" s2.Volume = 1
+            local s3 = Instance.new("Sound", handle) s3.SoundId = "rbxassetid://24111798" s3.Volume = 1
+            task.spawn(function()
+                while handle and handle.Parent do
+                    local choice = math.random(1, 3)
+                    if choice == 1 then s1:Play() elseif choice == 2 then s2:Play() else s3:Play() end
+                    task.wait(math.random(3, 7))
+                end
+            end)
+        end
+
+        local weld = Instance.new("Weld", handle)
+        weld.Part0 = handle
+        weld.Part1 = head
+        weld.C0 = CFrame.new(0, yOff, zOff)
+    end)
+end
+
+-- === OUTFIT ENFORCER ===
+local function applyOutfit(sID, pID, resetMode, targetChar)
+    OutfitToken = OutfitToken + 1
+    local myToken = OutfitToken
+    IsResetState = resetMode
+    CurrentShirt = (resetMode or sID:find("rbxassetid") or sID:find("rbxthumb")) and sID or "rbxthumb://type=Asset&id="..sID.."&w=420&h=420"
+    CurrentPants = (resetMode or pID:find("rbxassetid") or pID:find("rbxthumb")) and pID or "rbxthumb://type=Asset&id="..pID.."&w=420&h=420"
+    
+    local function enforce(char)
+        task.spawn(function()
+            local start = tick()
+            while tick() - start < 4 do
+                if OutfitToken ~= myToken or not char or not char.Parent then break end
+                local s = char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", char)
+                local p = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
+                s.ShirtTemplate = CurrentShirt
+                p.PantsTemplate = CurrentPants
+                for _, obj in ipairs(char:GetChildren()) do
+                    if obj:IsA("GraphicShirt") then obj:Destroy() end
+                    if obj:IsA("Shirt") and obj ~= s then obj:Destroy() end
+                    if obj:IsA("Pants") and obj ~= p then obj:Destroy() end
+                end
+
+                local targetTrans = IsResetState and 0 or 1
+                for _, obj in ipairs(char:GetChildren()) do
+                    if obj.Name == "NidavellirCustomAcc" then continue end
+                    if obj:IsA("BasePart") then
+                        if obj.Name == "Head" or (obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot"))) then
+                            obj.Transparency = targetTrans
+                            if obj.Name == "Head" and obj:FindFirstChild("face") then obj.face.Transparency = targetTrans end
+                        end
+                    elseif obj:IsA("Accessory") then
+                        for _, ap in ipairs(obj:GetDescendants()) do
+                            if ap:IsA("BasePart") or ap:IsA("Decal") then ap.Transparency = targetTrans end
+                        end
+                    end
+                end
+                applyLevelHide()
+                applyUIHide()
+                task.wait(0.1)
+            end
+        end)
+    end
+    local charToUse = targetChar or Player.Character
+    if charToUse then enforce(charToUse) end
+end
+
+-- === SKIN ENFORCER ===
+local function applySkin(color, resetMode, targetChar)
+    SkinToken = SkinToken + 1
+    local myToken = SkinToken
+    CurrentSkinColor = color
+    local function enforce(char)
+        task.spawn(function()
+            local start = tick()
+            while tick() - start < 4 do
+                if SkinToken ~= myToken or not char or not char.Parent then break end
+                if not resetMode and CurrentSkinColor then
+                    local bc = char:FindFirstChildOfClass("BodyColors")
+                    if not bc then
+                        bc = Instance.new("BodyColors")
+                        bc.Parent = char
+                    end
+                    bc.HeadColor3 = CurrentSkinColor
+                    bc.LeftArmColor3 = CurrentSkinColor
+                    bc.RightArmColor3 = CurrentSkinColor
+                    bc.LeftLegColor3 = CurrentSkinColor
+                    bc.RightLegColor3 = CurrentSkinColor
+                    bc.TorsoColor3 = CurrentSkinColor
+                elseif resetMode and OriginalBodyColors then
+                    local bc = char:FindFirstChildOfClass("BodyColors")
+                    if bc then bc:Destroy() end
+                    OriginalBodyColors:Clone().Parent = char
+                    break
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+    local charToUse = targetChar or Player.Character
+    if charToUse then enforce(charToUse) end
+end
+
+-- === RE-APPLY ON RESET ===
+local function onCharacterLoaded(char)
+    if CurrentShirt ~= "" then applyOutfit(CurrentShirt, CurrentPants, IsResetState, char) end
+    if CurrentSkinColor ~= nil then applySkin(CurrentSkinColor, false, char) end
+    if CurrentAccArgs then applyAcc(char, CurrentAccArgs) end
+end
+
+Player.CharacterAdded:Connect(function(char)
+    -- Fallback in case custom character models don't trigger CharacterAppearanceLoaded
+    task.delay(1.5, function()
+        if char and char.Parent then onCharacterLoaded(char) end
+    end)
+end)
+
+Player.CharacterAppearanceLoaded:Connect(function(char)
+    -- This reliably fires when native Roblox accessories are successfully loaded
+    task.wait(0.2)
+    onCharacterLoaded(char)
+end)
+
+-- === SAVE SYSTEM DATA LOGIC ===
+local SaveFileName = "NidavellirSaves.json"
+local SavedOutfitsData = {}
+local SavedUIRefs = {}
+
+local function s_Col(c) return c and {r=c.R, g=c.G, b=c.B} or nil end
+local function d_Col(t) return t and Color3.new(t.r, t.g, t.b) or nil end
+local function s_Vec(v) return v and {x=v.X, y=v.Y, z=v.Z} or nil end
+local function d_Vec(t) return t and Vector3.new(t.x, t.y, t.z) or nil end
+
+local function serializeAccArgs(args)
+    if not args then return nil end
+    local res = {args[1], args[2], args[3], args[4]}
+    if args[5] then res[5] = s_Vec(args[5]) end
+    if args[6] then res[6] = {Heat = args[6].Heat, Color = s_Col(args[6].Color)} end
+    return res
+end
+
+local function deserializeAccArgs(t)
+    if not t then return nil end
+    local res = {t[1], t[2], t[3], t[4]}
+    if t[5] then res[5] = d_Vec(t[5]) end
+    if t[6] then res[6] = {Heat = t[6].Heat, Color = d_Col(t[6].Color)} end
+    return res
+end
+
+local function writeSaves()
+    if writefile then
+        local success, encoded = pcall(function() return HttpService:JSONEncode(SavedOutfitsData) end)
+        if success then writefile(SaveFileName, encoded) end
+    end
+end
+
+-- === UI BUILDER ===
+local ScreenGui = Instance.new("ScreenGui")
+
+local targetGuiParent
+pcall(function()
+    if gethui then targetGuiParent = gethui() end
+end)
+if not targetGuiParent then
+    local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    targetGuiParent = success and coreGui or Player:WaitForChild("PlayerGui")
+end
+
+ScreenGui.Parent = targetGuiParent
+ScreenGui.Name = "NIDAVELLIR_GUI"
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 250, 0, 480)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -240)
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+local BordeauxColor = Color3.fromRGB(128, 0, 32)
+local DarkBordeaux = Color3.fromRGB(80, 0, 20)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 10)
+Title.Text = "NIDAVELLIR"
+Title.TextColor3 = BordeauxColor
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 22
+Title.BackgroundTransparency = 1
+
+local Pages = Instance.new("Frame", MainFrame)
+Pages.Size = UDim2.new(1, -20, 1, -190)
+Pages.Position = UDim2.new(0, 10, 0, 100)
+Pages.BackgroundTransparency = 1
+
+local function createPage()
+    local container = Instance.new("Frame", Pages)
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.BackgroundTransparency = 1
+    container.Visible = false
+
+    local f = Instance.new("ScrollingFrame", container)
+    f.Size = UDim2.new(1, 0, 1, 0)
+    f.BackgroundTransparency = 1
+    f.ScrollBarThickness = 2
+    local l = Instance.new("UIListLayout", f)
+    l.Padding = UDim.new(0, 6)
+    l.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    l.SortOrder = Enum.SortOrder.LayoutOrder
+    l:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        f.CanvasSize = UDim2.new(0, 0, 0, l.AbsoluteContentSize.Y + 5)
+    end)
+    return container, f
+end
+
+local OutfitTab, OutfitP = createPage() OutfitTab.Visible = true
+local SkinTab, SkinP = createPage()
+local ToolTab, ToolP = createPage()
+local AccTab, AccP = createPage()
+local GunTab, GunP = createPage()
+local SavedTab, SavedP = createPage()
+
+local function createBtn(txt, col, parent, cb)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(1, -5, 0, 32)
+    b.BackgroundColor3 = col
+    b.Text = txt:upper()
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    b.MouseButton1Click:Connect(cb)
+    return b
+end
+
+-- Tab Bar
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, -20, 0, 30)
+TabBar.Position = UDim2.new(0, 10, 0, 60)
+TabBar.BackgroundTransparency = 1
+local TabList = Instance.new("UIListLayout", TabBar)
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.Padding = UDim.new(0, 4)
+
+local function setupTab(name, order)
+    local b = createBtn(name, Color3.fromRGB(25, 25, 25), TabBar)
+    b.Size = UDim2.new(0.16, 0, 1, 0)
+    b.TextSize = 8
+    b.LayoutOrder = order
+    return b
+end
+
+local T1 = setupTab("OUTFITS", 1)
+local T2 = setupTab("SKIN", 2)
+local T3 = setupTab("TOOLS", 3)
+local T4 = setupTab("ACCS", 4)
+local T5 = setupTab("GUNS", 5)
+local T6 = setupTab("SAVED", 6)
+
+-- Static Footer Buttons
+local ResetAvatarBtn = createBtn("RESET AVATAR", DarkBordeaux, MainFrame, function() applyOutfit(OriginalShirt, OriginalPants, true) end)
+ResetAvatarBtn.Size = UDim2.new(1, -20, 0, 30) ResetAvatarBtn.Position = UDim2.new(0, 10, 1, -85)
+
+local ResetSkinBtn = createBtn("RESET SKIN TONE", DarkBordeaux, MainFrame, function() applySkin(nil, true) end)
+ResetSkinBtn.Size = UDim2.new(1, -20, 0, 30) ResetSkinBtn.Position = UDim2.new(0, 10, 1, -85) ResetSkinBtn.Visible = false
+
+local ResetTimeBtn = createBtn("RESET TIME CYCLE", DarkBordeaux, MainFrame, function() applyLighting(nil) end)
+ResetTimeBtn.Size = UDim2.new(1, -20, 0, 30) ResetTimeBtn.Position = UDim2.new(0, 10, 1, -85) ResetTimeBtn.Visible = false
+
+local ResetAccBtn = createBtn("REMOVE ACCESSORIES", DarkBordeaux, MainFrame, function()
+    CurrentAccArgs = nil
+    if Player.Character then for _, v in pairs(Player.Character:GetChildren()) do if v.Name == "NidavellirCustomAcc" then v:Destroy() end end end
+end)
+ResetAccBtn.Size = UDim2.new(1, -20, 0, 30) ResetAccBtn.Position = UDim2.new(0, 10, 1, -85) ResetAccBtn.Visible = false
+
+local CloseBtn = createBtn("TOGGLE GUI (F7)", Color3.fromRGB(40, 0, 0), MainFrame, function() MainFrame.Visible = false end)
+CloseBtn.Size = UDim2.new(1, -20, 0, 35)
+CloseBtn.Position = UDim2.new(0, 10, 1, -45)
+
+local function SwitchTab(tab)
+    OutfitTab.Visible = (tab=="O") SkinTab.Visible = (tab=="S") ToolTab.Visible = (tab=="T") AccTab.Visible = (tab=="A") GunTab.Visible = (tab=="G") SavedTab.Visible = (tab=="SV")
+    ResetAvatarBtn.Visible = (tab=="O" or tab=="SV") ResetSkinBtn.Visible = (tab=="S") ResetTimeBtn.Visible = (tab=="T") ResetAccBtn.Visible = (tab=="A")
+end
+
+T1.MouseButton1Click:Connect(function() SwitchTab("O") end)
+T2.MouseButton1Click:Connect(function() SwitchTab("S") end)
+T3.MouseButton1Click:Connect(function() SwitchTab("T") end)
+T4.MouseButton1Click:Connect(function() SwitchTab("A") end)
+T5.MouseButton1Click:Connect(function() SwitchTab("G") end)
+T6.MouseButton1Click:Connect(function() SwitchTab("SV") end)
+
+-- === OUTFITS TAB ===
+OutfitP.Size = UDim2.new(1, 0, 1, -40)
+local OutfitSearchBox = Instance.new("TextBox", OutfitTab)
+OutfitSearchBox.Size = UDim2.new(1, -5, 0, 32)
+OutfitSearchBox.Position = UDim2.new(0, 0, 1, -35)
+OutfitSearchBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+OutfitSearchBox.TextColor3 = Color3.new(1, 1, 1)
+OutfitSearchBox.Font = Enum.Font.GothamBold
+OutfitSearchBox.TextSize = 12
+OutfitSearchBox.PlaceholderText = "SEARCH OUTFITS..."
+OutfitSearchBox.Text = ""
+Instance.new("UICorner", OutfitSearchBox).CornerRadius = UDim.new(0, 6)
+
+local outfits = {
+    {"FEM", "90496496670985", "87434096937281"}, {"LEIFEN", "128102091001221", "140100566671121"},
+    {"DRACULA", "71375126050262", "131044823890502"}, {"TRIPPY", "123744182593552", "105322170847516"},
+    {"RED STRIPES", "78347653749174", "125430867704474"}, {"ANTIQUE", "96793954857348", "81877474271701"},
+    {"DEMONFLAKES", "131922256719420", "94846149811131"}, {"ROME GOD", "140685532390320", "119735736161089"},
+    {"BEFORE DEATH", "81154586296712", "122118071807542"}, {"PURPLE DEMON", "107262757428348", "81567517325807"},
+    {"DVD", "104874114862744", "87082194701554"}, {"CRUELINT VKEI WHITE", "83551828914015", "79458459663722"},
+    {"WHEELCHAIR", "81897251918843", "89246765410359"}, {"RVVZ", "94464650073587", "105497350428965"},
+    {"FOREST", "77071225404367", "118465170888147"}, {"MOE BALENCIAGA", "100098811070017", "113033250162217"},
+    {"ADIDAS TRACKSUIT", "77402994780831", "72513998118906"}, {"DEPOP", "92901296879272", "132595825036540"},
+    {"SUITED", "136662779245300", "73542344598169"}, {"ROSE", "137115475659158", "129466348077233"},
+    {"PONY", "97618859359149", "125138942037128"}, {"SANDY", "88741516199307", "94972754289125"},
+    {"GALAXY ADIDAS", "84809554070738", "79588119227965"}, {"RAWR", "74403912004029", "114178472288901"},
+    {"地獄 SIGMA", "3358112084710", "128880023035051"}, {"BLUE HOMELESS", "88638115054997", "135007731735256"},
+    {"DORITOS", "102459479324189", "130311926249168"}, {"POU", "134546161609112", "128666645981500"},
+    {"FROSTBITE", "134055702630915", "83555047265328"}, {"ALIEN F", "136995518396655", "127620980866191"},
+    {"BUTTONED UP", "103038498084850", "111544493105311"}, {"WHITE MONSTER", "82108126056056", "111449789978533"},
+    {"ARAB", "72040208556702", "118163074760282"}, {"SPECIAL", "94390390065006", "78791761028036"},
+    {"SPONGEBOB", "115108052637079", "137343055808841"}
+}
+
+local outfitButtons = {}
+for _, o in ipairs(outfits) do
+    local btn = createBtn(o[1], BordeauxColor, OutfitP, function() applyOutfit(o[2], o[3], false) end)
+    table.insert(outfitButtons, {Button = btn, Name = string.lower(o[1])})
+end
+
+OutfitSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local searchText = string.lower(OutfitSearchBox.Text)
+    for _, item in ipairs(outfitButtons) do
+        item.Button.Visible = (searchText == "" or string.find(item.Name, searchText))
+    end
+end)
+
+-- === SKIN TAB ===
+local skins = {
+    {"PALE", Color3.fromRGB(253, 234, 212)}, {"LIGHT", Color3.fromRGB(246, 203, 175)}, {"MEDIUM", Color3.fromRGB(219, 153, 114)},
+    {"TAN", Color3.fromRGB(180, 113, 76)}, {"DARK", Color3.fromRGB(124, 76, 50)}, {"DEEP", Color3.fromRGB(67, 40, 24)}, {"BLACK", Color3.fromRGB(0, 0, 0)}
+}
+for _, s in ipairs(skins) do createBtn(s[1], BordeauxColor, SkinP, function() applySkin(s[2], false) end) end
+
+-- === TOOLS TAB ===
+createBtn("HIDE LEVEL", BordeauxColor, ToolP, function() LevelHidden = not LevelHidden applyLevelHide() end)
+createBtn("INFINITE YIELD", BordeauxColor, ToolP, function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() end)
+createBtn("NIGHTSHIFT", BordeauxColor, ToolP, function() applyLighting(0) end)
+createBtn("DAYSHIFT", BordeauxColor, ToolP, function() applyLighting(12) end)
+createBtn("UI OFF", BordeauxColor, ToolP, function() UIHidden = not UIHidden applyUIHide() end)
+createBtn("FPS HIDDEN", BordeauxColor, ToolP, function() StatsSpoofed = not StatsSpoofed applyStatsSpoof() end)
+
+-- === ACCESSORIES TAB ===
+createBtn("CAT EARS", BordeauxColor, AccP, function() CurrentAccArgs = {"1374148", "413143035", -0.65, 0.15} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"215680403", "658646189", -1.3, 0, Vector3.new(1,1,1), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("RED FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"79855980527088", "120274046498591", -1.3, 0, Vector3.new(1.3, 1.3, 1.3), {Color = Color3.fromRGB(236, 139, 70), Heat = 9}} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("VOID CROWN", BordeauxColor, AccP, function() CurrentAccArgs = {"1125478", "1125479", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("GOLDEN CROWN", BordeauxColor, AccP, function() CurrentAccArgs = {"1078075", "1078071", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("PARTY HAT", BordeauxColor, AccP, function() CurrentAccArgs = {"1778999", "1778994", -1.1, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("ORANGE CW HP", BordeauxColor, AccP, function() CurrentAccArgs = {"187943426", "285584518", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("WHITE CW HP", BordeauxColor, AccP, function() CurrentAccArgs = {"187943426", "189255923", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("VALKYRIE", BordeauxColor, AccP, function() CurrentAccArgs = {"1365696", "1365693", -0.85, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("BLACKVALK", BordeauxColor, AccP, function() CurrentAccArgs = {"1365696", "124896442", -0.85, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("EERIE", BordeauxColor, AccP, function() CurrentAccArgs = {"1158007", "1158415", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("GHOSDEERI", BordeauxColor, AccP, function() CurrentAccArgs = {"1474596", "178262783", -0.45, 0.05, Vector3.new(0.45, 0.45, 0.45), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("BLIZZARIA", BordeauxColor, AccP, function() CurrentAccArgs = {"1158007", "106676124", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("RED VOID STAR", BordeauxColor, AccP, function() CurrentAccArgs = {"1125478", "1191134671", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("BLING BLING", BordeauxColor, AccP, function() CurrentAccArgs = {"6552775", "6552788", -1.1, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("SHADES", BordeauxColor, AccP, function() CurrentAccArgs = {"1577360", "1577349", -0.32, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286103", "128154319", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+
+createBtn("CHICKEN SUIT", BordeauxColor, AccP, function()
+    CurrentAccArgs = {"24101267", "24108148", -0.35, 0}
+    applyAcc(Player.Character, CurrentAccArgs)
+end)
+
+-- === GUNS TAB ===
+local gunButtons = {}
+for skinName, _ in pairs(WEAPON_SKINS) do
+    local baseWepName = string.split(skinName, " ")[1] 
+    local btn
+    btn = createBtn(skinName:upper() .. ": OFF", BordeauxColor, GunP, function()
+        if ActiveWeaponSkins[baseWepName] == skinName then
+            ActiveWeaponSkins[baseWepName] = nil
+        else
+            ActiveWeaponSkins[baseWepName] = skinName
+        end
+
+        for name, data in pairs(gunButtons) do
+            local base = string.split(name, " ")[1]
+            if ActiveWeaponSkins[base] == name then
+                data.Button.Text = name:upper() .. ": ON"
+                data.Button.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+            else
+                data.Button.Text = name:upper() .. ": OFF"
+                data.Button.BackgroundColor3 = BordeauxColor
+            end
+        end
+    end)
+    gunButtons[skinName] = {Button = btn}
+end
+
+-- === SAVED TAB ===
+SavedP.Size = UDim2.new(1, 0, 1, -75)
+local SaveNameBox = Instance.new("TextBox", SavedTab)
+SaveNameBox.Size = UDim2.new(1, -5, 0, 32)
+SaveNameBox.Position = UDim2.new(0, 0, 1, -70)
+SaveNameBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SaveNameBox.TextColor3 = Color3.new(1, 1, 1)
+SaveNameBox.Font = Enum.Font.GothamBold
+SaveNameBox.TextSize = 12
+SaveNameBox.PlaceholderText = "ENTER OUTFIT NAME..."
+SaveNameBox.Text = ""
+Instance.new("UICorner", SaveNameBox).CornerRadius = UDim.new(0, 6)
+
+function loadSavedButtons()
+    for _, btn in ipairs(SavedUIRefs) do btn:Destroy() end
+    SavedUIRefs = {}
+    for i, data in ipairs(SavedOutfitsData) do
+        local btnRow = Instance.new("Frame", SavedP)
+        btnRow.Size = UDim2.new(1, -5, 0, 32)
+        btnRow.BackgroundTransparency = 1
+        table.insert(SavedUIRefs, btnRow)
+        
+        local loadBtn = Instance.new("TextButton", btnRow)
+        loadBtn.Size = UDim2.new(0.8, -5, 1, 0)
+        loadBtn.BackgroundColor3 = BordeauxColor
+        loadBtn.Text = data.Name:upper()
+        loadBtn.TextColor3 = Color3.new(1,1,1)
+        loadBtn.Font = Enum.Font.GothamBold
+        loadBtn.TextSize = 12
+        Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 6)
+        
+        loadBtn.MouseButton1Click:Connect(function()
+            applyOutfit(data.Shirt, data.Pants, false)
+            if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
+            if data.AccArgs then applyAcc(Player.Character, deserializeAccArgs(data.AccArgs)) end
+        end)
+        
+        local delBtn = Instance.new("TextButton", btnRow)
+        delBtn.Size = UDim2.new(0.2, 0, 1, 0)
+        delBtn.Position = UDim2.new(0.8, 0, 0, 0)
+        delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        delBtn.Text = "X"
+        delBtn.TextColor3 = Color3.new(1,1,1)
+        delBtn.Font = Enum.Font.GothamBold
+        Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 6)
+        
+        delBtn.MouseButton1Click:Connect(function()
+            table.remove(SavedOutfitsData, i)
+            writeSaves()
+            loadSavedButtons()
+        end)
+    end
+end
+
+local SaveBtn = createBtn("SAVE CURRENT OUTFIT", DarkBordeaux, SavedTab, function()
+    local n = SaveNameBox.Text
+    if n == "" then n = "OUTFIT " .. (#SavedOutfitsData + 1) end
+    table.insert(SavedOutfitsData, {
+        Name = n,
+        Shirt = CurrentShirt,
+        Pants = CurrentPants,
+        SkinColor = s_Col(CurrentSkinColor),
+        AccArgs = serializeAccArgs(CurrentAccArgs)
+    })
+    writeSaves()
+    loadSavedButtons()
+    SaveNameBox.Text = ""
+end)
+SaveBtn.Size = UDim2.new(1, -5, 0, 32)
+SaveBtn.Position = UDim2.new(0, 0, 1, -35)
+
+if isfile and isfile(SaveFileName) then
+    pcall(function()
+        SavedOutfitsData = HttpService:JSONDecode(readfile(SaveFileName))
+    end)
+end
+loadSavedButtons()
+
+-- === KEYBINDS ===
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.F7 then
+        if MainFrame then
+            MainFrame.Visible = not MainFrame.Visible
+        end
+    end
+end)
