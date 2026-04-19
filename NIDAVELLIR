@@ -159,6 +159,43 @@ local WEAPON_SKINS = {
         MetalnessMap = "rbxassetid://16040463384",
         NormalMap = "rbxassetid://16040464100",
         RoughnessMap = "rbxassetid://16040464355"
+    },
+    -- === NEWLY MERGED SKINS ===
+    ["Itacha hellfire"] = {
+        ColorMap = "rbxassetid://120094510362818",
+        MetalnessMap = "rbxassetid://113748442311389",
+        NormalMap = "rbxassetid://89491017367979",
+        RoughnessMap = "rbxassetid://131860023245181"
+    },
+    ["M4A1 aureus"] = {
+        ColorMap = "rbxassetid://13714578814",
+        MetalnessMap = "rbxassetid://13714330861",
+        NormalMap = "rbxassetid://13714331534",
+        RoughnessMap = "rbxassetid://13714329843"
+    },
+    ["M4A1 frostbite"] = {
+        ColorMap = "rbxassetid://15695451364",
+        MetalnessMap = "rbxassetid://15695450936",
+        NormalMap = "rbxassetid://15695450725",
+        RoughnessMap = "rbxassetid://15695451590"
+    },
+    ["Tommy gold"] = {
+        ColorMap = "rbxassetid://15039147920",
+        MetalnessMap = "rbxassetid://15039147721",
+        NormalMap = "rbxassetid://15039147363",
+        RoughnessMap = "rbxassetid://15039147120"
+    },
+    ["FAL majesty"] = {
+        ColorMap = "rbxassetid://12268008265",
+        MetalnessMap = "rbxassetid://12267979022",
+        NormalMap = "rbxassetid://12267979962",
+        RoughnessMap = "rbxassetid://12267980974"
+    },
+    ["FNP bloodshot"] = {
+        ColorMap = "rbxassetid://13566118019",
+        MetalnessMap = "rbxassetid://13566119175",
+        NormalMap = "rbxassetid://13566120150",
+        RoughnessMap = "rbxassetid://13566128289"
     }
 }
 
@@ -303,7 +340,7 @@ RunService.RenderStepped:Connect(function()
                     if equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
                         needsSkin = true
                     else
-                        -- FIX: Verify game didn't override/delete the material after death on ANY MeshPart
+                        -- Verify game didn't override/delete the material after death on ANY MeshPart
                         for _, part in ipairs(equippedWep:GetDescendants()) do
                             if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
                                 needsSkin = true
@@ -327,7 +364,7 @@ RunService.RenderStepped:Connect(function()
                     if stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
                         needsSkin = true
                     else
-                        -- FIX: Verify game didn't override/delete the material after death on ANY MeshPart
+                        -- Verify game didn't override/delete the material after death on ANY MeshPart
                         for _, part in ipairs(stowedWep:GetDescendants()) do
                             if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
                                 needsSkin = true
