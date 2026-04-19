@@ -299,15 +299,22 @@ RunService.RenderStepped:Connect(function()
             if char then
                 local equippedWep = char:FindFirstChild(baseWepName)
                 if equippedWep then
+                    local needsSkin = false
                     if equippedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                        needsSkin = true
+                    else
+                        -- FIX: Verify game didn't override/delete the material after death on ANY MeshPart
+                        for _, part in ipairs(equippedWep:GetDescendants()) do
+                            if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
+                                needsSkin = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if needsSkin then
                         applyCustomWeaponSkin(equippedWep, skinData)
                         equippedWep:SetAttribute("CustomSkinApplied", activeSkinName)
-                    else
-                        -- Verify game didn't override/delete the material after death
-                        local mesh = equippedWep:FindFirstChildWhichIsA("MeshPart", true)
-                        if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
-                            applyCustomWeaponSkin(equippedWep, skinData)
-                        end
                     end
                 end
             end
@@ -316,15 +323,22 @@ RunService.RenderStepped:Connect(function()
             if displayItems then
                 local stowedWep = displayItems:FindFirstChild(baseWepName)
                 if stowedWep then
+                    local needsSkin = false
                     if stowedWep:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                        needsSkin = true
+                    else
+                        -- FIX: Verify game didn't override/delete the material after death on ANY MeshPart
+                        for _, part in ipairs(stowedWep:GetDescendants()) do
+                            if part:IsA("MeshPart") and not part:FindFirstChild("Custom_SurfaceAppearance") then
+                                needsSkin = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if needsSkin then
                         applyCustomWeaponSkin(stowedWep, skinData)
                         stowedWep:SetAttribute("CustomSkinApplied", activeSkinName)
-                    else
-                        -- Verify game didn't override/delete the material after death
-                        local mesh = stowedWep:FindFirstChildWhichIsA("MeshPart", true)
-                        if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
-                            applyCustomWeaponSkin(stowedWep, skinData)
-                        end
                     end
                 end
             end
@@ -437,6 +451,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
             end
         end)
     end
+    
     local charToUse = targetChar or Player.Character
     if charToUse then enforce(charToUse) end
 end
@@ -450,7 +465,7 @@ local function applySkin(color, resetMode, targetChar)
         task.spawn(function()
             local start = tick()
             while tick() - start < 4 do
-                if SkinToken ~= myToken or not char or not char.Parent then break end
+                 if SkinToken ~= myToken or not char or not char.Parent then break end
                 if not resetMode and CurrentSkinColor then
                     local bc = char:FindFirstChildOfClass("BodyColors")
                     if not bc then
