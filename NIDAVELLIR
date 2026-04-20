@@ -347,8 +347,9 @@ local function applyCustomWeaponSkin(weapon, skinData)
                         sa.NormalMap = skinData.NormalMap
                         sa.RoughnessMap = skinData.RoughnessMap
                         sa.Parent = v
+                        -- Bug Fix: Ensure we only force Transparency to 0 on explicit MeshParts so invisible hitboxes stay hidden
+                        v.Transparency = 0
                     end
-                    v.Transparency = 0
                 end
                 applied = true
                 
@@ -393,8 +394,11 @@ local function applyCustomWeaponSkin(weapon, skinData)
             end
         end
 
-        -- If the custom model already exists, we stop here (the originals are successfully hidden)
-        if container then return true end 
+        -- Bug Fix: Welds and instances break upon dropping. If container exists, destroy and rebuild instead of stopping.
+        if container then 
+            container:Destroy()
+            container = nil
+        end 
 
         local SOUNDS = { Fire = "rbxassetid://5033272182" }
         local FIRE_SETTINGS = { PlaybackSpeed = 1.0, Volume = 1.5 }
@@ -711,7 +715,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
                 local targetTrans = IsResetState and 0 or 1
                 for _, obj in ipairs(char:GetChildren()) do
                     if obj.Name == "NidavellirCustomAcc" then continue end
-                  
+                   
                     if obj:IsA("BasePart") then
                         if obj.Name == "Head" or (obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot"))) then
                             obj.Transparency = targetTrans
@@ -1160,7 +1164,7 @@ function loadSavedButtons()
             
             -- Restore Weapons
             if data.WeaponSkins then
-                ActiveWeaponSkins = data.WeaponSkins
+                 ActiveWeaponSkins = data.WeaponSkins
             else
                 ActiveWeaponSkins = {}
             end
@@ -1173,7 +1177,7 @@ function loadSavedButtons()
             if data.ClockTime ~= nil then applyLighting(data.ClockTime) else applyLighting(nil) end
         end)
         
-        local delBtn = Instance.new("TextButton", btnRow)
+         local delBtn = Instance.new("TextButton", btnRow)
         delBtn.Size = UDim2.new(0.2, 0, 1, 0)
         delBtn.Position = UDim2.new(0.8, 0, 0, 0)
         delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
@@ -1182,7 +1186,7 @@ function loadSavedButtons()
         delBtn.Font = Enum.Font.GothamBold
         Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 6)
         
-        delBtn.MouseButton1Click:Connect(function()
+         delBtn.MouseButton1Click:Connect(function()
             table.remove(SavedOutfitsData, i)
             writeSaves()
             loadSavedButtons()
