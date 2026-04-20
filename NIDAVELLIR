@@ -711,7 +711,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
                 local targetTrans = IsResetState and 0 or 1
                 for _, obj in ipairs(char:GetChildren()) do
                     if obj.Name == "NidavellirCustomAcc" then continue end
-                 
+                  
                     if obj:IsA("BasePart") then
                         if obj.Name == "Head" or (obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot"))) then
                             obj.Transparency = targetTrans
