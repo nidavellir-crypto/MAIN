@@ -380,7 +380,21 @@ local function applyCustomWeaponSkin(weapon, skinData)
 
     -- === ADVANCED LOGIC: MARE TRICKSHOT SOUND & MESH MOD ===
     elseif skinData.IsSpecial == "Mare_Trickshot" then
-        if weapon:FindFirstChild("ModView_Trickshot") then return true end
+        local container = weapon:FindFirstChild("ModView_Trickshot")
+        
+        -- 1. HIDE ORIGINALS (Aggressively enforced so game texture resets don't override)
+        for _, v in ipairs(weapon:GetDescendants()) do
+            if v:IsA("BasePart") then
+                if container and v:IsDescendantOf(container) then continue end
+                v.Transparency = 1
+                if v:IsA("MeshPart") then v.TextureID = "" end
+                local sa = v:FindFirstChildOfClass("SurfaceAppearance")
+                if sa then sa:Destroy() end
+            end
+        end
+
+        -- If the custom model already exists, we stop here (the originals are successfully hidden)
+        if container then return true end 
 
         local SOUNDS = { Fire = "rbxassetid://5033272182" }
         local FIRE_SETTINGS = { PlaybackSpeed = 1.0, Volume = 1.5 }
@@ -389,12 +403,12 @@ local function applyCustomWeaponSkin(weapon, skinData)
         local toolHandle = weapon:FindFirstChild("Handle") or weapon:FindFirstChildWhichIsA("BasePart")
         if not toolHandle then return false end
 
-        -- Changed to Model so the backpack UI renders the item properly
-        local container = Instance.new("Model")
+        -- Changed from Folder to Model. Backpack/Viewport UI scripts process Models much better.
+        container = Instance.new("Model")
         container.Name = "ModView_Trickshot"
         container.Parent = weapon
 
-        -- 1. APPLY CUSTOM & BASS-BOOSTED SOUNDS
+        -- 2. APPLY CUSTOM & BASS-BOOSTED SOUNDS
         for _, v in ipairs(weapon:GetDescendants()) do
             if v:IsA("Sound") then
                 local soundName = v.Name:lower()
@@ -424,13 +438,7 @@ local function applyCustomWeaponSkin(weapon, skinData)
             end
         end
 
-        -- 2. APPLY VISUAL MODEL & HIDE ORIGINALS
-        for _, v in ipairs(weapon:GetDescendants()) do
-            if v:IsA("BasePart") and not v:IsDescendantOf(container) then 
-                v.Transparency = 1 
-            end
-        end
-
+        -- 3. APPLY VISUAL MODEL
         local rsStorage = game:GetService("ReplicatedStorage"):FindFirstChild("Storage")
         local customModelPath = rsStorage and rsStorage:FindFirstChild("SkinVariants") and rsStorage.SkinVariants:FindFirstChild("Guns") and rsStorage.SkinVariants.Guns:FindFirstChild("mare_trickshot")
         
@@ -438,7 +446,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
             local customGun = customModelPath:Clone()
             customGun.Parent = container
 
-            -- Fix visibility
             for _, v in ipairs(customGun:GetDescendants()) do
                 if v:IsA("BasePart") then
                     if v:IsA("MeshPart") or v:IsA("UnionOperation") or v:FindFirstChildWhichIsA("SpecialMesh") then
@@ -455,6 +462,7 @@ local function applyCustomWeaponSkin(weapon, skinData)
             -- Setup Handling & Welding
             local customHandle = customGun.PrimaryPart or customGun:FindFirstChild("Handle") or customGun:FindFirstChild("Base") or customGun:FindFirstChildWhichIsA("BasePart")
             if customHandle then
+                container.PrimaryPart = customHandle -- Required for some ViewportFrames
                 for _, v in ipairs(customGun:GetDescendants()) do
                     if v:IsA("BasePart") then
                         v.Massless = true
@@ -472,7 +480,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
                 customHandle.CanCollide = false
                 customHandle.Anchored = false
 
-                -- Adjust offset/rotation positioning
                 local offsetCFrame = CFrame.new(0, 0, 0)
                 if customGun:IsA("Model") and customGun.PrimaryPart then
                     customGun:PivotTo(toolHandle.CFrame * offsetCFrame)
@@ -550,19 +557,14 @@ local function applyCustomWeaponSkin(weapon, skinData)
     return applied
 end
 
--- Efficient cache for dropped workspace tools
-local WorkspaceDroppedTools = {}
-for _, v in ipairs(workspace:GetChildren()) do
-    if v:IsA("Tool") then WorkspaceDroppedTools[v] = true end
-end
-workspace.ChildAdded:Connect(function(child)
-    if child:IsA("Tool") then WorkspaceDroppedTools[child] = true end
-end)
-workspace.ChildRemoved:Connect(function(child)
-    if WorkspaceDroppedTools[child] then WorkspaceDroppedTools[child] = nil end
-end)
+-- === OPTIMIZED MAIN LOOP ===
+-- Changed to Heartbeat + Throttled to 0.1s. Virtually 0 lag, instantly fixes drop override issue.
+local lastSkinTick = 0
+RunService.Heartbeat:Connect(function(dt)
+    lastSkinTick = lastSkinTick + dt
+    if lastSkinTick < 0.1 then return end
+    lastSkinTick = 0
 
-RunService.RenderStepped:Connect(function()
     pcall(function()
         local char = Player.Character
         local backpack = Player:FindFirstChild("Backpack")
@@ -586,24 +588,34 @@ RunService.RenderStepped:Connect(function()
             if backpack and backpack:FindFirstChild(baseWepName) then table.insert(targets, backpack[baseWepName]) end
             if displayItems and displayItems:FindFirstChild(baseWepName) then table.insert(targets, displayItems[baseWepName]) end
             if repStorageModels and repStorageModels:FindFirstChild(baseWepName) then table.insert(targets, repStorageModels[baseWepName]) end
-            
-            -- Add dropped workspace tools from our lag-free cache
-            for droppedTool in pairs(WorkspaceDroppedTools) do
-                if droppedTool.Name == baseWepName then
-                    table.insert(targets, droppedTool)
-                end
-            end
 
             for _, target in ipairs(targets) do
+                local needsApply = false
+                
+                -- Fast validation checks to prevent texture resets when dropped/equipped
                 if target:GetAttribute("CustomSkinApplied") ~= activeSkinName then
+                    needsApply = true
+                else
+                    if skinData.IsSpecial == "Mare_Trickshot" then
+                        if not target:FindFirstChild("ModView_Trickshot") then
+                            needsApply = true
+                        else
+                            local origHandle = target:FindFirstChild("Handle") or target:FindFirstChild("Base")
+                            if origHandle and origHandle.Transparency < 1 then
+                                needsApply = true
+                            end
+                        end
+                    else
+                        -- C++ speed check. If the game removed our custom texture, reapply instantly.
+                        if not target:FindFirstChild("Custom_SurfaceAppearance", true) then
+                            needsApply = true
+                        end
+                    end
+                end
+
+                if needsApply then
                     applyCustomWeaponSkin(target, skinData)
                     target:SetAttribute("CustomSkinApplied", activeSkinName)
-                else
-                    local mesh = target:FindFirstChildWhichIsA("MeshPart", true)
-                    -- Check if it needs reapplying, skip transparent trickshot meshes
-                    if mesh and mesh.Transparency < 1 and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
-                        applyCustomWeaponSkin(target, skinData)
-                    end
                 end
             end
         end
