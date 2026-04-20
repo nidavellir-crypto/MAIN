@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- === STATE TRACKING ===
 local OutfitToken = 0
@@ -145,7 +146,7 @@ local WEAPON_SKINS = {
         RoughnessMap = "rbxassetid://16355308060"
     },
     ["Mare trickshot"] = {
-        IsSpecial = "Mare_Trickshot", -- NEW: Added special flag for sound mod
+        IsSpecial = "Mare_Trickshot",
         ColorMap = "rbxassetid://16907785827",
         MetalnessMap = "rbxassetid://16907786165",
         NormalMap = "rbxassetid://16907787618",
@@ -377,43 +378,152 @@ local function applyCustomWeaponSkin(weapon, skinData)
         end
         return applied
 
-    -- === ADVANCED LOGIC: MARE TRICKSHOT SOUND MOD ===
+    -- === ADVANCED LOGIC: MARE TRICKSHOT SOUND & MESH MOD ===
     elseif skinData.IsSpecial == "Mare_Trickshot" then
-        local SOUNDS = {
-            Fire = "rbxassetid://5033272182",
-        }
-        -- Adjust these values if you want it faster/slower/louder
-        local FIRE_SETTINGS = { PlaybackSpeed = 1.0, Volume = 1.5 } 
+        if weapon:FindFirstChild("ModView_Trickshot") then return true end
 
+        local SOUNDS = { Fire = "rbxassetid://5033272182" }
+        local FIRE_SETTINGS = { PlaybackSpeed = 1.0, Volume = 1.5 }
+        local RELOAD_SETTINGS = { PlaybackSpeed = 0.8, BassBoost = 24, EchoIntensity = 0.4 }
+
+        local toolHandle = weapon:FindFirstChild("Handle") or weapon:FindFirstChildWhichIsA("BasePart")
+        if not toolHandle then return false end
+
+        local container = Instance.new("Folder")
+        container.Name = "ModView_Trickshot"
+        container.Parent = weapon
+
+        -- 1. APPLY CUSTOM & BASS-BOOSTED SOUNDS
         for _, v in ipairs(weapon:GetDescendants()) do
-            -- 1. APPLY SKIN
-            if v:IsA("MeshPart") then
-                for _, child in ipairs(v:GetChildren()) do
-                    if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
-                        child:Destroy()
-                    end
-                end
-                local sa = Instance.new("SurfaceAppearance")
-                sa.Name = "Custom_SurfaceAppearance"
-                sa.ColorMap = skinData.ColorMap
-                sa.MetalnessMap = skinData.MetalnessMap
-                sa.NormalMap = skinData.NormalMap
-                sa.RoughnessMap = skinData.RoughnessMap
-                sa.Parent = v
-                applied = true
-            end
-                
-            -- 2. SOUND LOGIC
             if v:IsA("Sound") then
                 local soundName = v.Name:lower()
-                if soundName:find("fire") or soundName:find("shot") then
+                if soundName:find("fire") or soundName:find("shoot") then
                     v.SoundId = SOUNDS.Fire
                     v.PlaybackSpeed = FIRE_SETTINGS.PlaybackSpeed
                     v.Volume = FIRE_SETTINGS.Volume
+                elseif soundName:find("reload") or soundName:find("mag") or soundName:find("clip") then
+                    v.PlaybackSpeed = RELOAD_SETTINGS.PlaybackSpeed
+                    if not v:FindFirstChild("ReloadBassBoost") then
+                        local eq = Instance.new("EqualizerSoundEffect")
+                        eq.Name = "ReloadBassBoost"
+                        eq.LowGain = RELOAD_SETTINGS.BassBoost
+                        eq.MidGain = 0
+                        eq.HighGain = -15
+                        eq.Parent = v
+                    end
+                    if not v:FindFirstChild("ReloadEcho") then
+                        local echo = Instance.new("EchoSoundEffect")
+                        echo.Name = "ReloadEcho"
+                        echo.Delay = 0.15
+                        echo.Feedback = 0.3
+                        echo.WetLevel = RELOAD_SETTINGS.EchoIntensity
+                        echo.Parent = v
+                    end
                 end
             end
         end
-        return applied
+
+        -- 2. APPLY VISUAL MODEL & HIDE ORIGINALS
+        for _, v in ipairs(weapon:GetDescendants()) do
+            if v:IsA("BasePart") and not v:IsDescendantOf(container) then 
+                v.Transparency = 1 
+            end
+        end
+
+        local rsStorage = game:GetService("ReplicatedStorage"):FindFirstChild("Storage")
+        local customModelPath = rsStorage and rsStorage:FindFirstChild("SkinVariants") and rsStorage.SkinVariants:FindFirstChild("Guns") and rsStorage.SkinVariants.Guns:FindFirstChild("mare_trickshot")
+        
+        if customModelPath then
+            local customGun = customModelPath:Clone()
+            customGun.Parent = container
+
+            -- Fix visibility
+            for _, v in ipairs(customGun:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    if v:IsA("MeshPart") or v:IsA("UnionOperation") or v:FindFirstChildWhichIsA("SpecialMesh") then
+                        if not string.match(string.lower(v.Name), "hitbox") and not string.match(string.lower(v.Name), "invisible") then
+                            v.Transparency = 0
+                            v.LocalTransparencyModifier = 0
+                        end
+                    else
+                        v.Transparency = 1
+                    end
+                end
+            end
+
+            -- Setup Handling & Welding
+            local customHandle = customGun.PrimaryPart or customGun:FindFirstChild("Handle") or customGun:FindFirstChild("Base") or customGun:FindFirstChildWhichIsA("BasePart")
+            if customHandle then
+                for _, v in ipairs(customGun:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        v.Massless = true
+                        v.CanCollide = false
+                        v.Anchored = false
+                        if v ~= customHandle and not v:FindFirstChildWhichIsA("JointInstance") then
+                            local internalWeld = Instance.new("WeldConstraint")
+                            internalWeld.Part0 = customHandle
+                            internalWeld.Part1 = v
+                            internalWeld.Parent = v
+                        end
+                    end
+                end
+                customHandle.Massless = true
+                customHandle.CanCollide = false
+                customHandle.Anchored = false
+
+                -- Adjust offset/rotation positioning
+                local offsetCFrame = CFrame.new(0, 0, 0)
+                if customGun:IsA("Model") and customGun.PrimaryPart then
+                    customGun:PivotTo(toolHandle.CFrame * offsetCFrame)
+                else
+                    customHandle.CFrame = toolHandle.CFrame * offsetCFrame
+                end
+
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = toolHandle
+                weld.Part1 = customHandle
+                weld.Parent = customHandle
+
+                -- Skin Custom Components
+                for _, part in ipairs(customGun:GetDescendants()) do
+                    if part:IsA("MeshPart") then
+                        for _, child in ipairs(part:GetChildren()) do
+                            if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
+                                child:Destroy()
+                            end
+                        end
+                        local sa = Instance.new("SurfaceAppearance")
+                        sa.Name = "Custom_SurfaceAppearance"
+                        sa.ColorMap = skinData.ColorMap
+                        sa.MetalnessMap = skinData.MetalnessMap
+                        sa.NormalMap = skinData.NormalMap
+                        sa.RoughnessMap = skinData.RoughnessMap
+                        sa.Parent = part
+                    end
+                end
+            end
+        else
+            -- Failsafe: Revert to standard appearance replacement if model folder is missing
+            for _, v in ipairs(weapon:GetDescendants()) do
+                if v:IsA("MeshPart") and not v:IsDescendantOf(container) then
+                    v.Transparency = 0 
+                    for _, child in ipairs(v:GetChildren()) do
+                        if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
+                            child:Destroy()
+                        end
+                    end
+                    local sa = Instance.new("SurfaceAppearance")
+                    sa.Name = "Custom_SurfaceAppearance"
+                    sa.ColorMap = skinData.ColorMap
+                    sa.MetalnessMap = skinData.MetalnessMap
+                    sa.NormalMap = skinData.NormalMap
+                    sa.RoughnessMap = skinData.RoughnessMap
+                    sa.Parent = v
+                end
+            end
+        end
+
+        return true
     end
 
     -- === STANDARD SKIN LOGIC (Fallback for everything else) ===
@@ -435,6 +545,7 @@ local function applyCustomWeaponSkin(weapon, skinData)
             applied = true
         end
     end
+   
     return applied
 end
 
@@ -469,7 +580,8 @@ RunService.RenderStepped:Connect(function()
                     target:SetAttribute("CustomSkinApplied", activeSkinName)
                 else
                     local mesh = target:FindFirstChildWhichIsA("MeshPart", true)
-                    if mesh and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
+                    -- Check if it needs reapplying, skip transparent trickshot meshes
+                    if mesh and mesh.Transparency < 1 and not mesh:FindFirstChild("Custom_SurfaceAppearance") then
                         applyCustomWeaponSkin(target, skinData)
                     end
                 end
@@ -488,7 +600,9 @@ local function applyAcc(char, args)
         
         task.wait(0.8)
         
-        for _, v in ipairs(char:GetChildren()) do if v.Name == "NidavellirCustomAcc" then v:Destroy() end end
+        for _, v in ipairs(char:GetChildren()) do 
+            if v.Name == "NidavellirCustomAcc" then v:Destroy() end 
+        end
 
         local mID = args[1]
         local tID = args[2]
@@ -555,6 +669,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
                 local p = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
                 s.ShirtTemplate = CurrentShirt
                 p.PantsTemplate = CurrentPants
+    
                 for _, obj in ipairs(char:GetChildren()) do
                     if obj:IsA("GraphicShirt") then obj:Destroy() end
                     if obj:IsA("Shirt") and obj ~= s then obj:Destroy() end
@@ -564,6 +679,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
                 local targetTrans = IsResetState and 0 or 1
                 for _, obj in ipairs(char:GetChildren()) do
                     if obj.Name == "NidavellirCustomAcc" then continue end
+                 
                     if obj:IsA("BasePart") then
                         if obj.Name == "Head" or (obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot"))) then
                             obj.Transparency = targetTrans
@@ -627,7 +743,6 @@ local function onCharacterLoaded(char)
     if CurrentShirt ~= "" then applyOutfit(CurrentShirt, CurrentPants, IsResetState, char) end
     if CurrentSkinColor ~= nil then applySkin(CurrentSkinColor, false, char) end
     if CurrentAccArgs then applyAcc(char, CurrentAccArgs) end
-    -- Tool states apply via existing loops, but we force applying UI/Level
     applyLevelHide()
     applyUIHide()
 end
