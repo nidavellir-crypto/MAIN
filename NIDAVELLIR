@@ -389,7 +389,8 @@ local function applyCustomWeaponSkin(weapon, skinData)
         local toolHandle = weapon:FindFirstChild("Handle") or weapon:FindFirstChildWhichIsA("BasePart")
         if not toolHandle then return false end
 
-        local container = Instance.new("Folder")
+        -- Changed to Model so the backpack UI renders the item properly
+        local container = Instance.new("Model")
         container.Name = "ModView_Trickshot"
         container.Parent = weapon
 
@@ -549,6 +550,18 @@ local function applyCustomWeaponSkin(weapon, skinData)
     return applied
 end
 
+-- Efficient cache for dropped workspace tools
+local WorkspaceDroppedTools = {}
+for _, v in ipairs(workspace:GetChildren()) do
+    if v:IsA("Tool") then WorkspaceDroppedTools[v] = true end
+end
+workspace.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") then WorkspaceDroppedTools[child] = true end
+end)
+workspace.ChildRemoved:Connect(function(child)
+    if WorkspaceDroppedTools[child] then WorkspaceDroppedTools[child] = nil end
+end)
+
 RunService.RenderStepped:Connect(function()
     pcall(function()
         local char = Player.Character
@@ -573,6 +586,13 @@ RunService.RenderStepped:Connect(function()
             if backpack and backpack:FindFirstChild(baseWepName) then table.insert(targets, backpack[baseWepName]) end
             if displayItems and displayItems:FindFirstChild(baseWepName) then table.insert(targets, displayItems[baseWepName]) end
             if repStorageModels and repStorageModels:FindFirstChild(baseWepName) then table.insert(targets, repStorageModels[baseWepName]) end
+            
+            -- Add dropped workspace tools from our lag-free cache
+            for droppedTool in pairs(WorkspaceDroppedTools) do
+                if droppedTool.Name == baseWepName then
+                    table.insert(targets, droppedTool)
+                end
+            end
 
             for _, target in ipairs(targets) do
                 if target:GetAttribute("CustomSkinApplied") ~= activeSkinName then
