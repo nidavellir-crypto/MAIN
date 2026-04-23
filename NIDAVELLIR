@@ -20,6 +20,10 @@ local UIHidden = false
 local StatsSpoofed = false
 local StatsSpoofConnection = nil
 
+-- New Toggles
+local IsHeadless = false
+local IsLeftLegless = false
+
 -- Save Originals
 local OriginalShirt = ""
 local OriginalPants = ""
@@ -297,6 +301,29 @@ local function applyStatsSpoof()
         end)
     end
 end
+
+-- === AVATAR STATE ENFORCERS ===
+local function applyHeadless()
+    local char = Player.Character
+    if not char then return end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj.Name == "Head" and obj:IsA("BasePart") then
+            obj.Transparency = IsHeadless and 1 or 0
+            if obj:FindFirstChild("face") then obj.face.Transparency = IsHeadless and 1 or 0 end
+        end
+    end
+end
+
+local function applyLegless()
+    local char = Player.Character
+    if not char then return end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("BasePart") and obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot")) then
+            obj.Transparency = IsLeftLegless and 1 or 0
+        end
+    end
+end
+
 
 -- === WEAPON SKIN LOGIC ===
 local function applyCustomWeaponSkin(weapon, skinData)
@@ -715,11 +742,13 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
                 local targetTrans = IsResetState and 0 or 1
                 for _, obj in ipairs(char:GetChildren()) do
                     if obj.Name == "NidavellirCustomAcc" then continue end
-                   
+                    
                     if obj:IsA("BasePart") then
-                        if obj.Name == "Head" or (obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot"))) then
-                            obj.Transparency = targetTrans
-                            if obj.Name == "Head" and obj:FindFirstChild("face") then obj.face.Transparency = targetTrans end
+                        if obj.Name == "Head" then
+                            obj.Transparency = IsHeadless and 1 or 0
+                            if obj:FindFirstChild("face") then obj.face.Transparency = IsHeadless and 1 or 0 end
+                        elseif obj.Name:find("Left") and (obj.Name:find("Leg") or obj.Name:find("Foot")) then
+                            obj.Transparency = IsLeftLegless and 1 or 0
                         end
                     elseif obj:IsA("Accessory") then
                         for _, ap in ipairs(obj:GetDescendants()) do
@@ -781,6 +810,8 @@ local function onCharacterLoaded(char)
     if CurrentAccArgs then applyAcc(char, CurrentAccArgs) end
     applyLevelHide()
     applyUIHide()
+    applyHeadless()
+    applyLegless()
 end
 
 Player.CharacterAdded:Connect(function(char)
@@ -1040,6 +1071,16 @@ createBtn("UI OFF", BordeauxColor, ToolP, applyUIBtn)
 createBtn("FPS HIDDEN", BordeauxColor, ToolP, applyStatsBtn)
 
 -- === ACCESSORIES TAB ===
+createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() 
+    IsHeadless = not IsHeadless 
+    applyHeadless() 
+end)
+
+createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() 
+    IsLeftLegless = not IsLeftLegless 
+    applyLegless() 
+end)
+
 createBtn("CAT EARS", BordeauxColor, AccP, function() CurrentAccArgs = {"1374148", "413143035", -0.65, 0.15} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"215680403", "658646189", -1.3, 0, Vector3.new(1,1,1), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("RED FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"79855980527088", "120274046498591", -1.3, 0, Vector3.new(1.3, 1.3, 1.3), {Color = Color3.fromRGB(236, 139, 70), Heat = 9}} applyAcc(Player.Character, CurrentAccArgs) end)
@@ -1100,7 +1141,7 @@ for skinName, _ in pairs(WEAPON_SKINS) do
         if ActiveWeaponSkins[baseWepName] == skinName then
             ActiveWeaponSkins[baseWepName] = nil
         else
-            ActiveWeaponSkins[baseWepName] = skinName
+             ActiveWeaponSkins[baseWepName] = skinName
         end
         updateGunButtonsUI()
     end)
@@ -1164,7 +1205,7 @@ function loadSavedButtons()
             
             -- Restore Weapons
             if data.WeaponSkins then
-                 ActiveWeaponSkins = data.WeaponSkins
+                ActiveWeaponSkins = data.WeaponSkins
             else
                 ActiveWeaponSkins = {}
             end
@@ -1175,9 +1216,15 @@ function loadSavedButtons()
             if data.UIHidden ~= nil then UIHidden = data.UIHidden applyUIHide() end
             if data.StatsSpoofed ~= nil then StatsSpoofed = data.StatsSpoofed applyStatsSpoof() end
             if data.ClockTime ~= nil then applyLighting(data.ClockTime) else applyLighting(nil) end
+            
+            -- Restore Body States
+            if data.IsHeadless ~= nil then IsHeadless = data.IsHeadless else IsHeadless = false end
+            if data.IsLeftLegless ~= nil then IsLeftLegless = data.IsLeftLegless else IsLeftLegless = false end
+            applyHeadless()
+            applyLegless()
         end)
         
-         local delBtn = Instance.new("TextButton", btnRow)
+        local delBtn = Instance.new("TextButton", btnRow)
         delBtn.Size = UDim2.new(0.2, 0, 1, 0)
         delBtn.Position = UDim2.new(0.8, 0, 0, 0)
         delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
@@ -1185,7 +1232,7 @@ function loadSavedButtons()
         delBtn.TextColor3 = Color3.new(1,1,1)
         delBtn.Font = Enum.Font.GothamBold
         Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 6)
-        
+
          delBtn.MouseButton1Click:Connect(function()
             table.remove(SavedOutfitsData, i)
             writeSaves()
@@ -1207,7 +1254,9 @@ local SaveBtn = createBtn("SAVE CURRENT LOADOUT", DarkBordeaux, SavedTab, functi
         LevelHidden = LevelHidden,
         UIHidden = UIHidden,
         StatsSpoofed = StatsSpoofed,
-        ClockTime = TargetClockTime
+        ClockTime = TargetClockTime,
+        IsHeadless = IsHeadless,
+        IsLeftLegless = IsLeftLegless
     })
     writeSaves()
     loadSavedButtons()
