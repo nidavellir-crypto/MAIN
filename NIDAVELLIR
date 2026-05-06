@@ -24,6 +24,13 @@ local StatsSpoofConnection = nil
 local IsHeadless = false
 local IsLeftLegless = false
 
+-- Sound Toggles
+local ActiveCustomKillSound = "NONE" -- "NONE", "OOF", "BELLS"
+local OofKillSoundId = "rbxassetid://123386626402988"
+local BellsKillSoundId = "rbxassetid://139799034861520"
+local OriginalKillSoundId = ""
+local KillSoundConnections = {}
+
 -- Save Originals
 local OriginalShirt = ""
 local OriginalPants = ""
@@ -44,168 +51,33 @@ end)
 -- === GUN SKIN DATA ===
 local ActiveWeaponSkins = {} 
 
--- Names must start with the exact Tool Name (e.g., "MAC-10", "Sawn-Off")
 local WEAPON_SKINS = {
-    ["Deagle gold"] = {
-        ColorMap = "rbxassetid://9422465914",
-        MetalnessMap = "rbxassetid://9422467019",
-        NormalMap = "rbxassetid://9368506864",
-        RoughnessMap = "rbxassetid://9422469052"
-    },
-    ["M4A1-1 PATRIOT"] = {
-        ColorMap = "rbxassetid://13945985275",
-        MetalnessMap = "rbxassetid://13945986111",
-        NormalMap = "rbxassetid://13945989865",
-        RoughnessMap = "rbxassetid://13945990897"
-    },
-    ["M4A1-1 MELT"] = {
-        ColorMap = "rbxassetid://138263153339452",
-        MetalnessMap = "rbxassetid://122701374554312",
-        NormalMap = "rbxassetid://92873024476028",
-        RoughnessMap = "rbxassetid://77602151073625"
-    },
-    ["Mare gold"] = {
-        ColorMap = "rbxassetid://16560241772",
-        MetalnessMap = "rbxassetid://8969034988",
-        NormalMap = "rbxassetid://8969047074",
-        RoughnessMap = "rbxassetid://8969056777"
-    },
-    ["MP7 hell"] = {
-        ColorMap = "rbxassetid://13842812065",
-        MetalnessMap = "rbxassetid://13841892618",
-        NormalMap = "rbxassetid://13841893577",
-        RoughnessMap = "rbxassetid://13841894868"
-    },
-    ["Uzi smiley"] = {
-        ColorMap = "rbxassetid://13841666943",
-        MetalnessMap = "rbxassetid://13841669024",
-        NormalMap = "rbxassetid://13841669834",
-        RoughnessMap = "rbxassetid://13715505740"
-    },
-    ["Beretta gold"] = {
-        ColorMap = "rbxassetid://15071881699",
-        MetalnessMap = "rbxassetid://15071881490",
-        NormalMap = "rbxassetid://15071881251",
-        RoughnessMap = "rbxassetid://15071880826"
-    },
-    ["AKS-74U cherry"] = {
-        ColorMap = "rbxassetid://16355374224",
-        MetalnessMap = "rbxassetid://16355374709",
-        NormalMap = "rbxassetid://16355375244",
-        RoughnessMap = "rbxassetid://16355375483"
-    },
-    ["SKS jester"] = {
-        ColorMap = "rbxassetid://13343167267",
-        MetalnessMap = "rbxassetid://13343167958",
-        NormalMap = "rbxassetid://13343168956",
-        RoughnessMap = "rbxassetid://13343169804"
-    },
-    ["M1911 glory"] = {
-        ColorMap = "rbxassetid://13948805827",
-        MetalnessMap = "rbxassetid://13948290980",
-        NormalMap = "rbxassetid://13948291596",
-        RoughnessMap = "rbxassetid://13948321939"
-    },
-    ["Sawn-Off glacial"] = {
-        ColorMap = "rbxassetid://13030805318",
-        MetalnessMap = "rbxassetid://13030809551",
-        NormalMap = "rbxassetid://13030811843",
-        RoughnessMap = "rbxassetid://13030812846"
-    },
-    ["G-17 elim"] = {
-        IsSpecial = "G17_Elim",
-        ColorMap = "rbxassetid://94164067871562",
-        MetalnessMap = "rbxassetid://133337669834230",
-        NormalMap = "rbxassetid://75074216652378",
-        RoughnessMap = "rbxassetid://112379003610843"
-    },
-    ["Deagle nacho"] = {
-        ColorMap = "rbxassetid://16942393059",
-        MetalnessMap = "rbxassetid://13937635046",
-        NormalMap = "rbxassetid://13935410021",
-        RoughnessMap = "rbxassetid://13935410676"
-    },
-    ["SKS jacko"] = {
-        ColorMap = "rbxassetid://15177197176",
-        MetalnessMap = "rbxassetid://15177198090",
-        NormalMap = "rbxassetid://15177203653",
-        RoughnessMap = "rbxassetid://15177204339"
-    },
-    ["Sawn-Off grandprix"] = {
-        ColorMap = "rbxassetid://13841748041",
-        MetalnessMap = "rbxassetid://13841749691",
-        NormalMap = "rbxassetid://13841750446",
-        RoughnessMap = "rbxassetid://13556254787"
-    },
-    ["UMP-45 daejing"] = {
-        ColorMap = "rbxassetid://125942364208210",
-        MetalnessMap = "rbxassetid://98525310658486",
-        NormalMap = "rbxassetid://80254908603579",
-        RoughnessMap = "rbxassetid://112502290266633"
-    },
-    ["Magnum amour"] = {
-        ColorMap = "rbxassetid://16355307379",
-        MetalnessMap = "rbxassetid://16355307601",
-        NormalMap = "rbxassetid://16355307807",
-        RoughnessMap = "rbxassetid://16355308060"
-    },
-    ["Mare trickshot"] = {
-        IsSpecial = "Mare_Trickshot",
-        ColorMap = "rbxassetid://16907785827",
-        MetalnessMap = "rbxassetid://16907786165",
-        NormalMap = "rbxassetid://16907787618",
-        RoughnessMap = "rbxassetid://16907788208"
-    },
-    ["MAC-10 cryofox"] = {
-        ColorMap = "rbxassetid://72676229182235",
-        MetalnessMap = "rbxassetid://99722143158841",
-        NormalMap = "rbxassetid://98358790768254",
-        RoughnessMap = "rbxassetid://75331173382652"
-    },
-    ["G-17 yosei"] = {
-        ColorMap = "rbxassetid://16040462957",
-        MetalnessMap = "rbxassetid://16040463384",
-        NormalMap = "rbxassetid://16040464100",
-        RoughnessMap = "rbxassetid://16040464355"
-    },
-    
-    -- === NEW SKINS ===
-    ["Ithaca-37 hellfire"] = {
-        ColorMap = "rbxassetid://120094510362818",
-        MetalnessMap = "rbxassetid://113748442311389",
-        NormalMap = "rbxassetid://89491017367979",
-        RoughnessMap = "rbxassetid://131860023245181"
-    },
-    ["M4A1-1 aureus"] = {
-        ColorMap = "rbxassetid://13714578814",
-        MetalnessMap = "rbxassetid://13714330861",
-        NormalMap = "rbxassetid://13714331534",
-        RoughnessMap = "rbxassetid://13714329843"
-    },
-    ["M4A1-1 frostbite"] = {
-        ColorMap = "rbxassetid://15695451364",
-        MetalnessMap = "rbxassetid://15695450936",
-        NormalMap = "rbxassetid://15695450725",
-        RoughnessMap = "rbxassetid://15695451590"
-    },
-    ["Tommy gold"] = {
-        ColorMap = "rbxassetid://15039147920",
-        MetalnessMap = "rbxassetid://15039147721",
-        NormalMap = "rbxassetid://15039147363",
-        RoughnessMap = "rbxassetid://15039147120"
-    },
-    ["FN-FAL majesty"] = {
-        ColorMap = "rbxassetid://12268008265",
-        MetalnessMap = "rbxassetid://12267979022",
-        NormalMap = "rbxassetid://12267979962",
-        RoughnessMap = "rbxassetid://12267980974"
-    },
-    ["FNP-45 bloodshot"] = {
-        ColorMap = "rbxassetid://13566118019",
-        MetalnessMap = "rbxassetid://13566119175",
-        NormalMap = "rbxassetid://13566120150",
-        RoughnessMap = "rbxassetid://13566128289"
-    }
+    ["Deagle gold"] = { ColorMap = "rbxassetid://9422465914", MetalnessMap = "rbxassetid://9422467019", NormalMap = "rbxassetid://9368506864", RoughnessMap = "rbxassetid://9422469052" },
+    ["M4A1-1 PATRIOT"] = { ColorMap = "rbxassetid://13945985275", MetalnessMap = "rbxassetid://13945986111", NormalMap = "rbxassetid://13945989865", RoughnessMap = "rbxassetid://13945990897" },
+    ["M4A1-1 MELT"] = { ColorMap = "rbxassetid://138263153339452", MetalnessMap = "rbxassetid://122701374554312", NormalMap = "rbxassetid://92873024476028", RoughnessMap = "rbxassetid://77602151073625" },
+    ["Mare gold"] = { ColorMap = "rbxassetid://16560241772", MetalnessMap = "rbxassetid://8969034988", NormalMap = "rbxassetid://8969047074", RoughnessMap = "rbxassetid://8969056777" },
+    ["MP7 hell"] = { ColorMap = "rbxassetid://13842812065", MetalnessMap = "rbxassetid://13841892618", NormalMap = "rbxassetid://13841893577", RoughnessMap = "rbxassetid://13841894868" },
+    ["Uzi smiley"] = { ColorMap = "rbxassetid://13841666943", MetalnessMap = "rbxassetid://13841669024", NormalMap = "rbxassetid://13841669834", RoughnessMap = "rbxassetid://13715505740" },
+    ["Beretta gold"] = { ColorMap = "rbxassetid://15071881699", MetalnessMap = "rbxassetid://15071881490", NormalMap = "rbxassetid://15071881251", RoughnessMap = "rbxassetid://15071880826" },
+    ["AKS-74U cherry"] = { ColorMap = "rbxassetid://16355374224", MetalnessMap = "rbxassetid://16355374709", NormalMap = "rbxassetid://16355375244", RoughnessMap = "rbxassetid://16355375483" },
+    ["SKS jester"] = { ColorMap = "rbxassetid://13343167267", MetalnessMap = "rbxassetid://13343167958", NormalMap = "rbxassetid://13343168956", RoughnessMap = "rbxassetid://13343169804" },
+    ["M1911 glory"] = { ColorMap = "rbxassetid://13948805827", MetalnessMap = "rbxassetid://13948290980", NormalMap = "rbxassetid://13948291596", RoughnessMap = "rbxassetid://13948321939" },
+    ["Sawn-Off glacial"] = { ColorMap = "rbxassetid://13030805318", MetalnessMap = "rbxassetid://13030809551", NormalMap = "rbxassetid://13030811843", RoughnessMap = "rbxassetid://13030812846" },
+    ["G-17 elim"] = { IsSpecial = "G17_Elim", ColorMap = "rbxassetid://94164067871562", MetalnessMap = "rbxassetid://133337669834230", NormalMap = "rbxassetid://75074216652378", RoughnessMap = "rbxassetid://112379003610843" },
+    ["Deagle nacho"] = { ColorMap = "rbxassetid://16942393059", MetalnessMap = "rbxassetid://13937635046", NormalMap = "rbxassetid://13935410021", RoughnessMap = "rbxassetid://13935410676" },
+    ["SKS jacko"] = { ColorMap = "rbxassetid://15177197176", MetalnessMap = "rbxassetid://15177198090", NormalMap = "rbxassetid://15177203653", RoughnessMap = "rbxassetid://15177204339" },
+    ["Sawn-Off grandprix"] = { ColorMap = "rbxassetid://13841748041", MetalnessMap = "rbxassetid://13841749691", NormalMap = "rbxassetid://13841750446", RoughnessMap = "rbxassetid://13556254787" },
+    ["UMP-45 daejing"] = { ColorMap = "rbxassetid://125942364208210", MetalnessMap = "rbxassetid://98525310658486", NormalMap = "rbxassetid://80254908603579", RoughnessMap = "rbxassetid://112502290266633" },
+    ["Magnum amour"] = { ColorMap = "rbxassetid://16355307379", MetalnessMap = "rbxassetid://16355307601", NormalMap = "rbxassetid://16355307807", RoughnessMap = "rbxassetid://16355308060" },
+    ["Mare trickshot"] = { IsSpecial = "Mare_Trickshot", ColorMap = "rbxassetid://16907785827", MetalnessMap = "rbxassetid://16907786165", NormalMap = "rbxassetid://16907787618", RoughnessMap = "rbxassetid://16907788208" },
+    ["MAC-10 cryofox"] = { ColorMap = "rbxassetid://72676229182235", MetalnessMap = "rbxassetid://99722143158841", NormalMap = "rbxassetid://98358790768254", RoughnessMap = "rbxassetid://75331173382652" },
+    ["G-17 yosei"] = { ColorMap = "rbxassetid://16040462957", MetalnessMap = "rbxassetid://16040463384", NormalMap = "rbxassetid://16040464100", RoughnessMap = "rbxassetid://16040464355" },
+    ["Ithaca-37 hellfire"] = { ColorMap = "rbxassetid://120094510362818", MetalnessMap = "rbxassetid://113748442311389", NormalMap = "rbxassetid://89491017367979", RoughnessMap = "rbxassetid://131860023245181" },
+    ["M4A1-1 aureus"] = { ColorMap = "rbxassetid://13714578814", MetalnessMap = "rbxassetid://13714330861", NormalMap = "rbxassetid://13714331534", RoughnessMap = "rbxassetid://13714329843" },
+    ["M4A1-1 frostbite"] = { ColorMap = "rbxassetid://15695451364", MetalnessMap = "rbxassetid://15695450936", NormalMap = "rbxassetid://15695450725", RoughnessMap = "rbxassetid://15695451590" },
+    ["Tommy gold"] = { ColorMap = "rbxassetid://15039147920", MetalnessMap = "rbxassetid://15039147721", NormalMap = "rbxassetid://15039147363", RoughnessMap = "rbxassetid://15039147120" },
+    ["FN-FAL majesty"] = { ColorMap = "rbxassetid://12268008265", MetalnessMap = "rbxassetid://12267979022", NormalMap = "rbxassetid://12267979962", RoughnessMap = "rbxassetid://12267980974" },
+    ["FNP-45 bloodshot"] = { ColorMap = "rbxassetid://13566118019", MetalnessMap = "rbxassetid://13566119175", NormalMap = "rbxassetid://13566120150", RoughnessMap = "rbxassetid://13566128289" }
 }
 
 -- === LIGHTING OVERRIDE ===
@@ -302,6 +174,61 @@ local function applyStatsSpoof()
     end
 end
 
+-- === SOUND LOGIC ===
+local function applyKillSound()
+    pcall(function()
+        local storage = ReplicatedStorage:WaitForChild("Storage", 3)
+        if not storage then return end
+        local uiSounds = storage:WaitForChild("UISounds", 3)
+        if not uiSounds then return end
+        local killSound = uiSounds:WaitForChild("kill_sound", 3)
+        
+        if killSound then
+            -- Disconnect previous hooks
+            for _, conn in ipairs(KillSoundConnections) do
+                conn:Disconnect()
+            end
+            table.clear(KillSoundConnections)
+
+            if OriginalKillSoundId == "" then
+                OriginalKillSoundId = killSound.SoundId
+            end
+
+            local targetId = OriginalKillSoundId
+            local targetOffset = 0
+
+            if ActiveCustomKillSound == "OOF" then
+                targetId = OofKillSoundId
+                targetOffset = 0.25
+            elseif ActiveCustomKillSound == "BELLS" then
+                targetId = BellsKillSoundId
+                targetOffset = 0 -- Typical sound start
+            end
+
+            if ActiveCustomKillSound ~= "NONE" then
+                killSound.SoundId = targetId
+                killSound.TimePosition = targetOffset
+
+                local conn1 = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
+                    if ActiveCustomKillSound ~= "NONE" and killSound.SoundId ~= targetId then
+                        killSound.SoundId = targetId
+                    end
+                end)
+                table.insert(KillSoundConnections, conn1)
+
+                local conn2 = killSound:GetPropertyChangedSignal("TimePosition"):Connect(function()
+                    if ActiveCustomKillSound ~= "NONE" and killSound.TimePosition < targetOffset then
+                        killSound.TimePosition = targetOffset
+                    end
+                end)
+                table.insert(KillSoundConnections, conn2)
+            else
+                killSound.SoundId = OriginalKillSoundId
+            end
+        end
+    end)
+end
+
 -- === AVATAR STATE ENFORCERS ===
 local function applyHeadless()
     local char = Player.Character
@@ -324,47 +251,34 @@ local function applyLegless()
     end
 end
 
-
 -- === WEAPON SKIN LOGIC ===
 local function applyCustomWeaponSkin(weapon, skinData)
     local applied = false
 
-    -- === ADVANCED LOGIC: G-17 ELIMINATION MOD ===
     if skinData.IsSpecial == "G17_Elim" then
-        local SOUNDS = {
-            Fire = "rbxassetid://3466984142",
-            ReloadSlide = "rbxassetid://86227568494434",
-        }
+        local SOUNDS = { Fire = "rbxassetid://3466984142", ReloadSlide = "rbxassetid://86227568494434" }
         local FIRE_SETTINGS = { PlaybackSpeed = 2.3, Volume = 0.8 }
         local RELOAD_SETTINGS = { PlaybackSpeed = 1.1, Volume = 1.5 }
         local BULLET_COLOR = Color3.fromRGB(175, 130, 140)
         local SIGHT_COLOR = Color3.fromRGB(255, 0, 127)
 
         for _, v in ipairs(weapon:GetDescendants()) do
-            -- 1. MESH & MATERIAL LOGIC
             if v:IsA("MeshPart") or v:IsA("Part") then
                 local name = v.Name:lower()
-                
-                -- Clear old textures/SurfaceAppearances
                 for _, child in ipairs(v:GetChildren()) do
                     if child:IsA("SurfaceAppearance") or child:IsA("Texture") or child:IsA("Decal") then
                         child:Destroy()
                     end
                 end
 
-                -- A. Check for Ironsights
                 if name:find("sight") or name:find("iron") or name:find("dot") then
                     v.Color = SIGHT_COLOR
                     v.Material = Enum.Material.Neon
                     v.Transparency = 0
-                    
-                -- B. Check for Ghost Parts (Slide & Barrel)
                 elseif name:find("slide") or name:find("barrel") then
-                    v.Color = Color3.new(0, 0, 0) -- Pure Black
-                    v.Transparency = 0.4          -- See-through
+                    v.Color = Color3.new(0, 0, 0) 
+                    v.Transparency = 0.4          
                     v.Material = Enum.Material.Plastic
-                    
-                -- C. Everything else (Frame/Body) gets the Skin
                 else
                     if v:IsA("MeshPart") then
                         local sa = Instance.new("SurfaceAppearance")
@@ -374,13 +288,10 @@ local function applyCustomWeaponSkin(weapon, skinData)
                         sa.NormalMap = skinData.NormalMap
                         sa.RoughnessMap = skinData.RoughnessMap
                         sa.Parent = v
-                        -- Bug Fix: Ensure we only force Transparency to 0 on explicit MeshParts so invisible hitboxes stay hidden
                         v.Transparency = 0
                     end
                 end
                 applied = true
-                
-            -- 2. SOUND LOGIC
             elseif v:IsA("Sound") then
                 local soundName = v.Name:lower()
                 if soundName:find("fire") or soundName:find("shot") then
@@ -392,8 +303,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
                     v.PlaybackSpeed = RELOAD_SETTINGS.PlaybackSpeed
                     v.Volume = RELOAD_SETTINGS.Volume
                 end
-
-            -- 3. BULLET & SHELL LOGIC
             elseif v:IsA("BasePart") then
                 if v.Name:lower():find("shell") or v.Name:lower():find("bullet") then
                     v.Color = BULLET_COLOR
@@ -406,11 +315,8 @@ local function applyCustomWeaponSkin(weapon, skinData)
         end
         return applied
 
-    -- === ADVANCED LOGIC: MARE TRICKSHOT SOUND & MESH MOD ===
     elseif skinData.IsSpecial == "Mare_Trickshot" then
         local container = weapon:FindFirstChild("ModView_Trickshot")
-        
-        -- 1. HIDE ORIGINALS (Aggressively enforced so game texture resets don't override)
         for _, v in ipairs(weapon:GetDescendants()) do
             if v:IsA("BasePart") then
                 if container and v:IsDescendantOf(container) then continue end
@@ -421,7 +327,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
             end
         end
 
-        -- Bug Fix: Welds and instances break upon dropping. If container exists, destroy and rebuild instead of stopping.
         if container then 
             container:Destroy()
             container = nil
@@ -434,12 +339,10 @@ local function applyCustomWeaponSkin(weapon, skinData)
         local toolHandle = weapon:FindFirstChild("Handle") or weapon:FindFirstChildWhichIsA("BasePart")
         if not toolHandle then return false end
 
-        -- Changed from Folder to Model. Backpack/Viewport UI scripts process Models much better.
         container = Instance.new("Model")
         container.Name = "ModView_Trickshot"
         container.Parent = weapon
 
-        -- 2. APPLY CUSTOM & BASS-BOOSTED SOUNDS
         for _, v in ipairs(weapon:GetDescendants()) do
             if v:IsA("Sound") then
                 local soundName = v.Name:lower()
@@ -469,7 +372,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
             end
         end
 
-        -- 3. APPLY VISUAL MODEL
         local rsStorage = game:GetService("ReplicatedStorage"):FindFirstChild("Storage")
         local customModelPath = rsStorage and rsStorage:FindFirstChild("SkinVariants") and rsStorage.SkinVariants:FindFirstChild("Guns") and rsStorage.SkinVariants.Guns:FindFirstChild("mare_trickshot")
         
@@ -490,10 +392,9 @@ local function applyCustomWeaponSkin(weapon, skinData)
                 end
             end
 
-            -- Setup Handling & Welding
             local customHandle = customGun.PrimaryPart or customGun:FindFirstChild("Handle") or customGun:FindFirstChild("Base") or customGun:FindFirstChildWhichIsA("BasePart")
             if customHandle then
-                container.PrimaryPart = customHandle -- Required for some ViewportFrames
+                container.PrimaryPart = customHandle 
                 for _, v in ipairs(customGun:GetDescendants()) do
                     if v:IsA("BasePart") then
                         v.Massless = true
@@ -523,7 +424,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
                 weld.Part1 = customHandle
                 weld.Parent = customHandle
 
-                -- Skin Custom Components
                 for _, part in ipairs(customGun:GetDescendants()) do
                     if part:IsA("MeshPart") then
                         for _, child in ipairs(part:GetChildren()) do
@@ -542,7 +442,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
                 end
             end
         else
-            -- Failsafe: Revert to standard appearance replacement if model folder is missing
             for _, v in ipairs(weapon:GetDescendants()) do
                 if v:IsA("MeshPart") and not v:IsDescendantOf(container) then
                     v.Transparency = 0 
@@ -565,7 +464,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
         return true
     end
 
-    -- === STANDARD SKIN LOGIC (Fallback for everything else) ===
     for _, part in ipairs(weapon:GetDescendants()) do
         if part:IsA("MeshPart") then
             for _, child in ipairs(part:GetChildren()) do
@@ -589,7 +487,6 @@ local function applyCustomWeaponSkin(weapon, skinData)
 end
 
 -- === OPTIMIZED MAIN LOOP ===
--- Changed to Heartbeat + Throttled to 0.1s. Virtually 0 lag, instantly fixes drop override issue.
 local lastSkinTick = 0
 RunService.Heartbeat:Connect(function(dt)
     lastSkinTick = lastSkinTick + dt
@@ -623,7 +520,6 @@ RunService.Heartbeat:Connect(function(dt)
             for _, target in ipairs(targets) do
                 local needsApply = false
                 
-                -- Fast validation checks to prevent texture resets when dropped/equipped
                 if target:GetAttribute("CustomSkinApplied") ~= activeSkinName then
                     needsApply = true
                 else
@@ -637,7 +533,6 @@ RunService.Heartbeat:Connect(function(dt)
                             end
                         end
                     else
-                        -- C++ speed check. If the game removed our custom texture, reapply instantly.
                         if not target:FindFirstChild("Custom_SurfaceAppearance", true) then
                             needsApply = true
                         end
@@ -812,6 +707,7 @@ local function onCharacterLoaded(char)
     applyUIHide()
     applyHeadless()
     applyLegless()
+    applyKillSound()
 end
 
 Player.CharacterAdded:Connect(function(char)
@@ -875,8 +771,8 @@ ScreenGui.Name = "NIDAVELLIR_GUI"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 280, 0, 520) 
-MainFrame.Position = UDim2.new(0.5, -140, 0.5, -260)
+MainFrame.Size = UDim2.new(0, 330, 0, 520) 
+MainFrame.Position = UDim2.new(0.5, -165, 0.5, -260)
 MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -924,6 +820,7 @@ local SkinTab, SkinP = createPage()
 local ToolTab, ToolP = createPage()
 local AccTab, AccP = createPage()
 local GunTab, GunP = createPage()
+local SoundTab, SoundP = createPage() 
 local SavedTab, SavedP = createPage()
 
 local function createBtn(txt, col, parent, cb)
@@ -950,18 +847,19 @@ TabList.Padding = UDim.new(0, 4)
 
 local function setupTab(name, order)
     local b = createBtn(name, Color3.fromRGB(25, 25, 25), TabBar)
-    b.Size = UDim2.new(0.16, 0, 1, 0)
+    b.Size = UDim2.new(0.13, 0, 1, 0)
     b.TextSize = 8
     b.LayoutOrder = order
     return b
 end
 
-local T1 = setupTab("OUTFITS", 1)
+local T1 = setupTab("OUTFIT", 1)
 local T2 = setupTab("SKIN", 2)
 local T3 = setupTab("TOOLS", 3)
 local T4 = setupTab("ACCS", 4)
 local T5 = setupTab("GUNS", 5)
-local T6 = setupTab("LOADOUTS", 6)
+local T6 = setupTab("SOUND", 6)
+local T7 = setupTab("LOADS", 7)
 
 -- Static Footer Buttons
 local ResetAvatarBtn = createBtn("RESET AVATAR", DarkBordeaux, MainFrame, function() applyOutfit(OriginalShirt, OriginalPants, true) end)
@@ -984,7 +882,7 @@ CloseBtn.Size = UDim2.new(1, -20, 0, 35)
 CloseBtn.Position = UDim2.new(0, 10, 1, -45)
 
 local function SwitchTab(tab)
-    OutfitTab.Visible = (tab=="O") SkinTab.Visible = (tab=="S") ToolTab.Visible = (tab=="T") AccTab.Visible = (tab=="A") GunTab.Visible = (tab=="G") SavedTab.Visible = (tab=="SV")
+    OutfitTab.Visible = (tab=="O") SkinTab.Visible = (tab=="S") ToolTab.Visible = (tab=="T") AccTab.Visible = (tab=="A") GunTab.Visible = (tab=="G") SoundTab.Visible = (tab=="SD") SavedTab.Visible = (tab=="SV")
     ResetAvatarBtn.Visible = (tab=="O" or tab=="SV") ResetSkinBtn.Visible = (tab=="S") ResetTimeBtn.Visible = (tab=="T") ResetAccBtn.Visible = (tab=="A")
 end
 
@@ -993,7 +891,8 @@ T2.MouseButton1Click:Connect(function() SwitchTab("S") end)
 T3.MouseButton1Click:Connect(function() SwitchTab("T") end)
 T4.MouseButton1Click:Connect(function() SwitchTab("A") end)
 T5.MouseButton1Click:Connect(function() SwitchTab("G") end)
-T6.MouseButton1Click:Connect(function() SwitchTab("SV") end)
+T6.MouseButton1Click:Connect(function() SwitchTab("SD") end)
+T7.MouseButton1Click:Connect(function() SwitchTab("SV") end)
 
 -- === OUTFITS TAB ===
 OutfitP.Size = UDim2.new(1, 0, 1, -40)
@@ -1027,8 +926,6 @@ local outfits = {
     {"BUTTONED UP", "103038498084850", "111544493105311"}, {"WHITE MONSTER", "82108126056056", "111449789978533"},
     {"ARAB", "72040208556702", "118163074760282"}, {"SPECIAL", "94390390065006", "78791761028036"},
     {"SPONGEBOB", "115108052637079", "137343055808841"},
-    
-    -- NEW OUTFITS
     {"BUNNY BLACK SHIRT", "110312172564568", "101672293647920"}, {"WHITE BUTTENED SHIRT", "116551161551118", "71511511740522"},
     {"BUCKET 1", "95591145180376", "123298497882960"}, {"SCARECROW", "76565397210818", "84869402314933"},
     {"BUCKET 2", "115202382477385", "120277141001497"}, {"BUCKET 3", "90463068523648", "81118105467888"},
@@ -1070,6 +967,42 @@ createBtn("DAYSHIFT", BordeauxColor, ToolP, function() applyLighting(12) end)
 createBtn("UI OFF", BordeauxColor, ToolP, applyUIBtn)
 createBtn("FPS HIDDEN", BordeauxColor, ToolP, applyStatsBtn)
 
+-- === SOUND TAB ===
+local function updateSoundUI()
+    -- Intentionally left blank here, will be defined fully below to hook up toggles
+end
+
+local soundOofBtn = createBtn("CUSTOM OOF SOUND : OFF", BordeauxColor, SoundP, function()
+    ActiveCustomKillSound = (ActiveCustomKillSound == "OOF") and "NONE" or "OOF"
+    applyKillSound()
+    updateSoundUI()
+end)
+
+local soundBellsBtn = createBtn("BELLS KILL SOUND : OFF", BordeauxColor, SoundP, function()
+    ActiveCustomKillSound = (ActiveCustomKillSound == "BELLS") and "NONE" or "BELLS"
+    applyKillSound()
+    updateSoundUI()
+end)
+
+function updateSoundUI()
+    if ActiveCustomKillSound == "OOF" then
+        soundOofBtn.Text = "CUSTOM OOF SOUND : ON"
+        soundOofBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+    else
+        soundOofBtn.Text = "CUSTOM OOF SOUND : OFF"
+        soundOofBtn.BackgroundColor3 = BordeauxColor
+    end
+
+    if ActiveCustomKillSound == "BELLS" then
+        soundBellsBtn.Text = "BELLS KILL SOUND : ON"
+        soundBellsBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+    else
+        soundBellsBtn.Text = "BELLS KILL SOUND : OFF"
+        soundBellsBtn.BackgroundColor3 = BordeauxColor
+    end
+end
+updateSoundUI() -- Initial Call
+
 -- === ACCESSORIES TAB ===
 createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() 
     IsHeadless = not IsHeadless 
@@ -1099,11 +1032,7 @@ createBtn("BLING BLING", BordeauxColor, AccP, function() CurrentAccArgs = {"6552
 createBtn("SHADES", BordeauxColor, AccP, function() CurrentAccArgs = {"1577360", "1577349", -0.32, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286103", "128154319", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-
-createBtn("CHICKEN SUIT", BordeauxColor, AccP, function()
-    CurrentAccArgs = {"24101267", "24108148", -0.35, 0}
-    applyAcc(Player.Character, CurrentAccArgs)
-end)
+createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
 -- === GUNS TAB ===
 GunP.Size = UDim2.new(1, 0, 1, -40)
@@ -1187,11 +1116,9 @@ function loadSavedButtons()
         Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 6)
         
         loadBtn.MouseButton1Click:Connect(function()
-            -- Restore Outfit
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
             
-            -- Restore Accessory
             CurrentAccArgs = deserializeAccArgs(data.AccArgs)
             if CurrentAccArgs then 
                 applyAcc(Player.Character, CurrentAccArgs) 
@@ -1203,7 +1130,6 @@ function loadSavedButtons()
                 end
             end
             
-            -- Restore Weapons
             if data.WeaponSkins then
                 ActiveWeaponSkins = data.WeaponSkins
             else
@@ -1211,17 +1137,20 @@ function loadSavedButtons()
             end
             updateGunButtonsUI()
             
-            -- Restore Tools (Level Hide, UI Hide, Stats Spoof, Day/Nightshift)
             if data.LevelHidden ~= nil then LevelHidden = data.LevelHidden applyLevelHide() end
             if data.UIHidden ~= nil then UIHidden = data.UIHidden applyUIHide() end
             if data.StatsSpoofed ~= nil then StatsSpoofed = data.StatsSpoofed applyStatsSpoof() end
             if data.ClockTime ~= nil then applyLighting(data.ClockTime) else applyLighting(nil) end
             
-            -- Restore Body States
             if data.IsHeadless ~= nil then IsHeadless = data.IsHeadless else IsHeadless = false end
             if data.IsLeftLegless ~= nil then IsLeftLegless = data.IsLeftLegless else IsLeftLegless = false end
+            
+            if data.ActiveCustomKillSound ~= nil then ActiveCustomKillSound = data.ActiveCustomKillSound else ActiveCustomKillSound = "NONE" end
+            
             applyHeadless()
             applyLegless()
+            applyKillSound()
+            updateSoundUI()
         end)
         
         local delBtn = Instance.new("TextButton", btnRow)
@@ -1233,7 +1162,7 @@ function loadSavedButtons()
         delBtn.Font = Enum.Font.GothamBold
         Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 6)
 
-         delBtn.MouseButton1Click:Connect(function()
+        delBtn.MouseButton1Click:Connect(function()
             table.remove(SavedOutfitsData, i)
             writeSaves()
             loadSavedButtons()
@@ -1256,7 +1185,8 @@ local SaveBtn = createBtn("SAVE CURRENT LOADOUT", DarkBordeaux, SavedTab, functi
         StatsSpoofed = StatsSpoofed,
         ClockTime = TargetClockTime,
         IsHeadless = IsHeadless,
-        IsLeftLegless = IsLeftLegless
+        IsLeftLegless = IsLeftLegless,
+        ActiveCustomKillSound = ActiveCustomKillSound
     })
     writeSaves()
     loadSavedButtons()
