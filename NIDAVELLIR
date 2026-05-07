@@ -36,7 +36,7 @@ local CUSTOM_KILL_SOUNDS = {
     WALLAHI = { Id = "rbxassetid://105279752117918",  Offset = 0 },
 }
 
--- Helper list for random picking (auto‑updated with the table above)
+-- Helper list for random picking
 local RandomSoundKeys = {}
 for k, _ in pairs(CUSTOM_KILL_SOUNDS) do
     table.insert(RandomSoundKeys, k)
@@ -188,7 +188,7 @@ local function applyStatsSpoof()
     end
 end
 
--- === SOUND LOGIC (FIXED RANDOM MODE TO CHANGE EVERY KILL) ===
+-- === SOUND LOGIC (TRUE RANDOM EVERY KILL) ===
 local function applyKillSound()
     pcall(function()
         local storage = ReplicatedStorage:WaitForChild("Storage", 3)
@@ -198,7 +198,6 @@ local function applyKillSound()
         local killSound = uiSounds:WaitForChild("kill_sound", 3)
         
         if killSound then
-            -- Clean up old hooks
             for _, conn in ipairs(KillSoundConnections) do
                 conn:Disconnect()
             end
@@ -210,7 +209,6 @@ local function applyKillSound()
 
             local isRandom = (ActiveCustomKillSound == "RANDOM")
 
-            -- Function to set a new random sound (used both initially and each time the game tries to reset)
             local function setRandomSound()
                 if #RandomSoundKeys == 0 then return end
                 local key = RandomSoundKeys[math.random(#RandomSoundKeys)]
@@ -220,36 +218,43 @@ local function applyKillSound()
             end
 
             if isRandom then
-                -- Set initial random sound
+                -- Set first random sound
                 setRandomSound()
 
-                -- The key fix: every time the game changes the SoundId (which happens for each kill),
-                -- we immediately overwrite it with a new random sound.
-                local conn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
+                -- After each kill sound ENDS, prepare a NEW random sound for the next kill
+                local conn = killSound:GetPropertyChangedSignal("IsPlaying"):Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
-                    -- To avoid infinite loop (changing SoundId triggers this again), we check if the current
-                    -- SoundId is already one of our custom sounds; if it is, it was probably set by us, so we skip.
-                    local currentId = killSound.SoundId
-                    for _, info in pairs(CUSTOM_KILL_SOUNDS) do
-                        if currentId == info.Id then
-                            return -- already a custom sound, don't change again
-                        end
+                    -- When the sound stops playing, it means the kill sound has finished.
+                    -- Now we can safely change the SoundId to a new random one,
+                    -- so the next kill will automatically use it.
+                    if not killSound.IsPlaying then
+                        setRandomSound()
                     end
-                    -- If it's not a custom sound, it means the game reset it to the default kill sound,
-                    -- so we replace it with a new random one.
-                    setRandomSound()
                 end)
                 table.insert(KillSoundConnections, conn)
 
+                -- Also keep a SoundId hook as a fallback, but avoid interfering with our changes
+                local sidConn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
+                    if ActiveCustomKillSound ~= "RANDOM" then return end
+                    -- If the game changed the SoundId to something else (e.g., original),
+                    -- we force it back to a random one immediately, but only if it's not
+                    -- already one of our custom sounds (to prevent loops).
+                    local currentId = killSound.SoundId
+                    for _, info in pairs(CUSTOM_KILL_SOUNDS) do
+                        if currentId == info.Id then
+                            return -- already custom, leave it
+                        end
+                    end
+                    setRandomSound()
+                end)
+                table.insert(KillSoundConnections, sidConn)
+
             elseif ActiveCustomKillSound ~= "NONE" then
-                -- Fixed custom sound (non-random)
                 local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
                 if info then
                     killSound.SoundId = info.Id
                     killSound.TimePosition = info.Offset
                 end
-
-                -- Hook to override SoundId whenever the game tries to change it
                 local conn1 = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
                     if ActiveCustomKillSound == "NONE" then return end
                     local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
@@ -259,8 +264,6 @@ local function applyKillSound()
                     end
                 end)
                 table.insert(KillSoundConnections, conn1)
-
-                -- Also keep TimePosition in check
                 local conn2 = killSound:GetPropertyChangedSignal("TimePosition"):Connect(function()
                     local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
                     if info and killSound.TimePosition < info.Offset then
@@ -269,7 +272,6 @@ local function applyKillSound()
                 end)
                 table.insert(KillSoundConnections, conn2)
             else
-                -- NONE mode
                 killSound.SoundId = OriginalKillSoundId
             end
         end
@@ -1071,7 +1073,7 @@ for soundKey, _ in pairs(CUSTOM_KILL_SOUNDS) do
 end
 updateSoundUI()
 
--- === ACCESSORIES TAB (NEW ONES NOW USE CHICKEN SUIT OFFSETS & SIZE) ===
+-- === ACCESSORIES TAB (NEW ONES USE CHICKEN SUIT OFFSETS & SIZE) ===
 createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() IsHeadless = not IsHeadless applyHeadless() end)
 createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() IsLeftLegless = not IsLeftLegless applyLegless() end)
 
@@ -1095,7 +1097,7 @@ createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286
 createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
--- New accessories with CHICKEN SUIT offsets & size (yOff=-0.35, zOff=0, no custom scale)
+-- New accessories with CHICKEN SUIT offsets & size
 createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("DARK CONJOUR", BordeauxColor, AccP, function() CurrentAccArgs = {"93129244", "93129336", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
