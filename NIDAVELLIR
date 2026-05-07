@@ -36,7 +36,7 @@ local CUSTOM_KILL_SOUNDS = {
     WALLAHI = { Id = "rbxassetid://105279752117918",  Offset = 0 },
 }
 
--- Helper list for random picking
+-- Helper list for random picking (auto‑updated with the table above)
 local RandomSoundKeys = {}
 for k, _ in pairs(CUSTOM_KILL_SOUNDS) do
     table.insert(RandomSoundKeys, k)
@@ -188,7 +188,7 @@ local function applyStatsSpoof()
     end
 end
 
--- === SOUND LOGIC (TRUE RANDOM EVERY KILL) ===
+-- === SOUND LOGIC (FIXED RANDOM MODE – EVERY KILL A NEW RANDOM SOUND) ===
 local function applyKillSound()
     pcall(function()
         local storage = ReplicatedStorage:WaitForChild("Storage", 3)
@@ -198,6 +198,7 @@ local function applyKillSound()
         local killSound = uiSounds:WaitForChild("kill_sound", 3)
         
         if killSound then
+            -- Clean up old hooks
             for _, conn in ipairs(KillSoundConnections) do
                 conn:Disconnect()
             end
@@ -209,6 +210,7 @@ local function applyKillSound()
 
             local isRandom = (ActiveCustomKillSound == "RANDOM")
 
+            -- Helper to set a random custom sound
             local function setRandomSound()
                 if #RandomSoundKeys == 0 then return end
                 local key = RandomSoundKeys[math.random(#RandomSoundKeys)]
@@ -218,31 +220,24 @@ local function applyKillSound()
             end
 
             if isRandom then
-                -- Set first random sound
+                -- Set initial random sound
                 setRandomSound()
 
-                -- After each kill sound ENDS, prepare a NEW random sound for the next kill
-                local conn = killSound:GetPropertyChangedSignal("IsPlaying"):Connect(function()
+                -- After the kill sound finishes, prepare a fresh random sound for next time
+                local endedConn = killSound.Ended:Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
-                    -- When the sound stops playing, it means the kill sound has finished.
-                    -- Now we can safely change the SoundId to a new random one,
-                    -- so the next kill will automatically use it.
-                    if not killSound.IsPlaying then
-                        setRandomSound()
-                    end
+                    setRandomSound()
                 end)
-                table.insert(KillSoundConnections, conn)
+                table.insert(KillSoundConnections, endedConn)
 
-                -- Also keep a SoundId hook as a fallback, but avoid interfering with our changes
+                -- Also listen if the game changes the SoundId (e.g., resets to default).
+                -- If it's not already one of our custom sounds, replace it with a random one.
                 local sidConn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
-                    -- If the game changed the SoundId to something else (e.g., original),
-                    -- we force it back to a random one immediately, but only if it's not
-                    -- already one of our custom sounds (to prevent loops).
                     local currentId = killSound.SoundId
                     for _, info in pairs(CUSTOM_KILL_SOUNDS) do
                         if currentId == info.Id then
-                            return -- already custom, leave it
+                            return -- already a custom sound, leave it
                         end
                     end
                     setRandomSound()
@@ -250,6 +245,7 @@ local function applyKillSound()
                 table.insert(KillSoundConnections, sidConn)
 
             elseif ActiveCustomKillSound ~= "NONE" then
+                -- Fixed custom sound (non-random)
                 local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
                 if info then
                     killSound.SoundId = info.Id
@@ -272,6 +268,7 @@ local function applyKillSound()
                 end)
                 table.insert(KillSoundConnections, conn2)
             else
+                -- NONE mode
                 killSound.SoundId = OriginalKillSoundId
             end
         end
