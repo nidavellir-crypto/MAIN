@@ -210,7 +210,7 @@ local function applyKillSound()
 
             local isRandom = (ActiveCustomKillSound == "RANDOM")
 
-            -- Function to set a new random sound (used both initially and after each kill)
+            -- Function to set a new random sound (used both initially and each time the game tries to reset)
             local function setRandomSound()
                 if #RandomSoundKeys == 0 then return end
                 local key = RandomSoundKeys[math.random(#RandomSoundKeys)]
@@ -223,23 +223,23 @@ local function applyKillSound()
                 -- Set initial random sound
                 setRandomSound()
 
-                -- Hook into the Ended event so after every kill the sound changes
-                local endedConn = killSound.Ended:Connect(function()
+                -- The key fix: every time the game changes the SoundId (which happens for each kill),
+                -- we immediately overwrite it with a new random sound.
+                local conn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
+                    -- To avoid infinite loop (changing SoundId triggers this again), we check if the current
+                    -- SoundId is already one of our custom sounds; if it is, it was probably set by us, so we skip.
+                    local currentId = killSound.SoundId
+                    for _, info in pairs(CUSTOM_KILL_SOUNDS) do
+                        if currentId == info.Id then
+                            return -- already a custom sound, don't change again
+                        end
+                    end
+                    -- If it's not a custom sound, it means the game reset it to the default kill sound,
+                    -- so we replace it with a new random one.
                     setRandomSound()
                 end)
-                table.insert(KillSoundConnections, endedConn)
-
-                -- Also keep a SoundId hook as a fallback (in case the game resets the sound for any reason)
-                local soundIdConn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
-                    if ActiveCustomKillSound ~= "RANDOM" then return end
-                    -- If the game changes SoundId to something else, force it back to a random one
-                    if killSound.SoundId ~= OriginalKillSoundId and CUSTOM_KILL_SOUNDS[ActiveCustomKillSound] then
-                        -- It may have been changed by game, but we will re-randomize to be safe
-                        setRandomSound()
-                    end
-                end)
-                table.insert(KillSoundConnections, soundIdConn)
+                table.insert(KillSoundConnections, conn)
 
             elseif ActiveCustomKillSound ~= "NONE" then
                 -- Fixed custom sound (non-random)
