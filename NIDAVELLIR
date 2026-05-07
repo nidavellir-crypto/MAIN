@@ -1070,7 +1070,7 @@ for soundKey, _ in pairs(CUSTOM_KILL_SOUNDS) do
 end
 updateSoundUI()
 
--- === ACCESSORIES TAB (NEW ONES USE CHICKEN SUIT OFFSETS & SIZE) ===
+-- === ACCESSORIES TAB (ADJUSTED ACCORDING TO YOUR REQUEST) ===
 createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() IsHeadless = not IsHeadless applyHeadless() end)
 createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() IsLeftLegless = not IsLeftLegless applyLegless() end)
 
@@ -1094,12 +1094,12 @@ createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286
 createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
--- New accessories with CHICKEN SUIT offsets & size
-createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+-- === NEW ACCESSORIES WITH YOUR CUSTOM ADJUSTMENTS ===
+createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", 0.15, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("DARK CONJOUR", BordeauxColor, AccP, function() CurrentAccArgs = {"93129244", "93129336", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0, Vector3.new(2.5, 2.5, 2.5)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
 -- === GUNS TAB ===
 GunP.Size = UDim2.new(1, 0, 1, -40)
