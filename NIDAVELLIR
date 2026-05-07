@@ -24,10 +24,24 @@ local StatsSpoofConnection = nil
 local IsHeadless = false
 local IsLeftLegless = false
 
--- Sound Toggles
-local ActiveCustomKillSound = "NONE" -- "NONE", "OOF", "BELLS"
-local OofKillSoundId = "rbxassetid://123386626402988"
-local BellsKillSoundId = "rbxassetid://139799034861520"
+-- Sound Toggles -----------------------------------------------------------------
+local ActiveCustomKillSound = "NONE"   -- "NONE", "OOF", "BELLS", "67", "RAKE", "WINDOWS", "WALLAHI", "RANDOM"
+
+local CUSTOM_KILL_SOUNDS = {
+    OOF     = { Id = "rbxassetid://123386626402988",  Offset = 0.25 },
+    BELLS   = { Id = "rbxassetid://139799034861520",  Offset = 0 },
+    ["67"]  = { Id = "rbxassetid://136438852585760",  Offset = 0 },
+    RAKE    = { Id = "rbxassetid://133233237556401",  Offset = 0 },
+    WINDOWS = { Id = "rbxassetid://111617177185247",  Offset = 0 },
+    WALLAHI = { Id = "rbxassetid://105279752117918",  Offset = 0 },
+}
+
+-- Helper list for random picking (auto‑updated with the table above)
+local RandomSoundKeys = {}
+for k, _ in pairs(CUSTOM_KILL_SOUNDS) do
+    table.insert(RandomSoundKeys, k)
+end
+
 local OriginalKillSoundId = ""
 local KillSoundConnections = {}
 
@@ -174,7 +188,7 @@ local function applyStatsSpoof()
     end
 end
 
--- === SOUND LOGIC ===
+-- === SOUND LOGIC (FIXED RANDOM MODE TO CHANGE EVERY KILL) ===
 local function applyKillSound()
     pcall(function()
         local storage = ReplicatedStorage:WaitForChild("Storage", 3)
@@ -184,7 +198,7 @@ local function applyKillSound()
         local killSound = uiSounds:WaitForChild("kill_sound", 3)
         
         if killSound then
-            -- Disconnect previous hooks
+            -- Clean up old hooks
             for _, conn in ipairs(KillSoundConnections) do
                 conn:Disconnect()
             end
@@ -194,35 +208,68 @@ local function applyKillSound()
                 OriginalKillSoundId = killSound.SoundId
             end
 
-            local targetId = OriginalKillSoundId
-            local targetOffset = 0
+            local isRandom = (ActiveCustomKillSound == "RANDOM")
 
-            if ActiveCustomKillSound == "OOF" then
-                targetId = OofKillSoundId
-                targetOffset = 0.25
-            elseif ActiveCustomKillSound == "BELLS" then
-                targetId = BellsKillSoundId
-                targetOffset = 0 -- Typical sound start
+            -- Function to set a new random sound (used both initially and after each kill)
+            local function setRandomSound()
+                if #RandomSoundKeys == 0 then return end
+                local key = RandomSoundKeys[math.random(#RandomSoundKeys)]
+                local info = CUSTOM_KILL_SOUNDS[key]
+                killSound.SoundId = info.Id
+                killSound.TimePosition = info.Offset
             end
 
-            if ActiveCustomKillSound ~= "NONE" then
-                killSound.SoundId = targetId
-                killSound.TimePosition = targetOffset
+            if isRandom then
+                -- Set initial random sound
+                setRandomSound()
 
+                -- Hook into the Ended event so after every kill the sound changes
+                local endedConn = killSound.Ended:Connect(function()
+                    if ActiveCustomKillSound ~= "RANDOM" then return end
+                    setRandomSound()
+                end)
+                table.insert(KillSoundConnections, endedConn)
+
+                -- Also keep a SoundId hook as a fallback (in case the game resets the sound for any reason)
+                local soundIdConn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
+                    if ActiveCustomKillSound ~= "RANDOM" then return end
+                    -- If the game changes SoundId to something else, force it back to a random one
+                    if killSound.SoundId ~= OriginalKillSoundId and CUSTOM_KILL_SOUNDS[ActiveCustomKillSound] then
+                        -- It may have been changed by game, but we will re-randomize to be safe
+                        setRandomSound()
+                    end
+                end)
+                table.insert(KillSoundConnections, soundIdConn)
+
+            elseif ActiveCustomKillSound ~= "NONE" then
+                -- Fixed custom sound (non-random)
+                local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
+                if info then
+                    killSound.SoundId = info.Id
+                    killSound.TimePosition = info.Offset
+                end
+
+                -- Hook to override SoundId whenever the game tries to change it
                 local conn1 = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
-                    if ActiveCustomKillSound ~= "NONE" and killSound.SoundId ~= targetId then
-                        killSound.SoundId = targetId
+                    if ActiveCustomKillSound == "NONE" then return end
+                    local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
+                    if info and killSound.SoundId ~= info.Id then
+                        killSound.SoundId = info.Id
+                        killSound.TimePosition = info.Offset
                     end
                 end)
                 table.insert(KillSoundConnections, conn1)
 
+                -- Also keep TimePosition in check
                 local conn2 = killSound:GetPropertyChangedSignal("TimePosition"):Connect(function()
-                    if ActiveCustomKillSound ~= "NONE" and killSound.TimePosition < targetOffset then
-                        killSound.TimePosition = targetOffset
+                    local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
+                    if info and killSound.TimePosition < info.Offset then
+                        killSound.TimePosition = info.Offset
                     end
                 end)
                 table.insert(KillSoundConnections, conn2)
             else
+                -- NONE mode
                 killSound.SoundId = OriginalKillSoundId
             end
         end
@@ -877,13 +924,31 @@ local ResetAccBtn = createBtn("REMOVE ACCESSORIES", DarkBordeaux, MainFrame, fun
 end)
 ResetAccBtn.Size = UDim2.new(1, -20, 0, 30) ResetAccBtn.Position = UDim2.new(0, 10, 1, -85) ResetAccBtn.Visible = false
 
+-- Random Sounds toggle footer button
+local RandomSoundsBtn = createBtn("RANDOM SOUNDS : OFF", DarkBordeaux, MainFrame, function()
+    if ActiveCustomKillSound == "RANDOM" then
+        ActiveCustomKillSound = "NONE"
+    else
+        ActiveCustomKillSound = "RANDOM"
+    end
+    applyKillSound()
+    updateSoundUI()
+end)
+RandomSoundsBtn.Size = UDim2.new(1, -20, 0, 30)
+RandomSoundsBtn.Position = UDim2.new(0, 10, 1, -85)
+RandomSoundsBtn.Visible = false
+
 local CloseBtn = createBtn("TOGGLE GUI (F7)", Color3.fromRGB(40, 0, 0), MainFrame, function() MainFrame.Visible = false end)
 CloseBtn.Size = UDim2.new(1, -20, 0, 35)
 CloseBtn.Position = UDim2.new(0, 10, 1, -45)
 
 local function SwitchTab(tab)
     OutfitTab.Visible = (tab=="O") SkinTab.Visible = (tab=="S") ToolTab.Visible = (tab=="T") AccTab.Visible = (tab=="A") GunTab.Visible = (tab=="G") SoundTab.Visible = (tab=="SD") SavedTab.Visible = (tab=="SV")
-    ResetAvatarBtn.Visible = (tab=="O" or tab=="SV") ResetSkinBtn.Visible = (tab=="S") ResetTimeBtn.Visible = (tab=="T") ResetAccBtn.Visible = (tab=="A")
+    ResetAvatarBtn.Visible = (tab=="O" or tab=="SV")
+    ResetSkinBtn.Visible = (tab=="S")
+    ResetTimeBtn.Visible = (tab=="T")
+    ResetAccBtn.Visible = (tab=="A")
+    RandomSoundsBtn.Visible = (tab=="SD")
 end
 
 T1.MouseButton1Click:Connect(function() SwitchTab("O") end)
@@ -968,51 +1033,47 @@ createBtn("UI OFF", BordeauxColor, ToolP, applyUIBtn)
 createBtn("FPS HIDDEN", BordeauxColor, ToolP, applyStatsBtn)
 
 -- === SOUND TAB ===
+local soundButtons = {}
+
 local function updateSoundUI()
-    -- Intentionally left blank here, will be defined fully below to hook up toggles
-end
-
-local soundOofBtn = createBtn("CUSTOM OOF SOUND : OFF", BordeauxColor, SoundP, function()
-    ActiveCustomKillSound = (ActiveCustomKillSound == "OOF") and "NONE" or "OOF"
-    applyKillSound()
-    updateSoundUI()
-end)
-
-local soundBellsBtn = createBtn("BELLS KILL SOUND : OFF", BordeauxColor, SoundP, function()
-    ActiveCustomKillSound = (ActiveCustomKillSound == "BELLS") and "NONE" or "BELLS"
-    applyKillSound()
-    updateSoundUI()
-end)
-
-function updateSoundUI()
-    if ActiveCustomKillSound == "OOF" then
-        soundOofBtn.Text = "CUSTOM OOF SOUND : ON"
-        soundOofBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
-    else
-        soundOofBtn.Text = "CUSTOM OOF SOUND : OFF"
-        soundOofBtn.BackgroundColor3 = BordeauxColor
+    for _, entry in ipairs(soundButtons) do
+        local btn = entry.Button
+        local key = entry.SoundKey
+        if ActiveCustomKillSound == key then
+            btn.Text = key:upper() .. " : ON"
+            btn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+        else
+            btn.Text = key:upper() .. " : OFF"
+            btn.BackgroundColor3 = BordeauxColor
+        end
     end
 
-    if ActiveCustomKillSound == "BELLS" then
-        soundBellsBtn.Text = "BELLS KILL SOUND : ON"
-        soundBellsBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+    if ActiveCustomKillSound == "RANDOM" then
+        RandomSoundsBtn.Text = "RANDOM SOUNDS : ON"
+        RandomSoundsBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
     else
-        soundBellsBtn.Text = "BELLS KILL SOUND : OFF"
-        soundBellsBtn.BackgroundColor3 = BordeauxColor
+        RandomSoundsBtn.Text = "RANDOM SOUNDS : OFF"
+        RandomSoundsBtn.BackgroundColor3 = DarkBordeaux
     end
 end
-updateSoundUI() -- Initial Call
 
--- === ACCESSORIES TAB ===
-createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() 
-    IsHeadless = not IsHeadless 
-    applyHeadless() 
-end)
+for soundKey, _ in pairs(CUSTOM_KILL_SOUNDS) do
+    local btn = createBtn(soundKey:upper() .. " : OFF", BordeauxColor, SoundP, function()
+        if ActiveCustomKillSound == soundKey then
+            ActiveCustomKillSound = "NONE"
+        else
+            ActiveCustomKillSound = soundKey
+        end
+        applyKillSound()
+        updateSoundUI()
+    end)
+    table.insert(soundButtons, {Button = btn, SoundKey = soundKey})
+end
+updateSoundUI()
 
-createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() 
-    IsLeftLegless = not IsLeftLegless 
-    applyLegless() 
-end)
+-- === ACCESSORIES TAB (NEW ONES NOW USE CHICKEN SUIT OFFSETS & SIZE) ===
+createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() IsHeadless = not IsHeadless applyHeadless() end)
+createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() IsLeftLegless = not IsLeftLegless applyLegless() end)
 
 createBtn("CAT EARS", BordeauxColor, AccP, function() CurrentAccArgs = {"1374148", "413143035", -0.65, 0.15} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"215680403", "658646189", -1.3, 0, Vector3.new(1,1,1), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
@@ -1033,6 +1094,13 @@ createBtn("SHADES", BordeauxColor, AccP, function() CurrentAccArgs = {"1577360",
 createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286103", "128154319", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+
+-- New accessories with CHICKEN SUIT offsets & size (yOff=-0.35, zOff=0, no custom scale)
+createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DARK CONJOUR", BordeauxColor, AccP, function() CurrentAccArgs = {"93129244", "93129336", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
 -- === GUNS TAB ===
 GunP.Size = UDim2.new(1, 0, 1, -40)
@@ -1118,35 +1186,17 @@ function loadSavedButtons()
         loadBtn.MouseButton1Click:Connect(function()
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
-            
             CurrentAccArgs = deserializeAccArgs(data.AccArgs)
-            if CurrentAccArgs then 
-                applyAcc(Player.Character, CurrentAccArgs) 
-            else
-                if Player.Character then 
-                    for _, v in pairs(Player.Character:GetChildren()) do 
-                        if v.Name == "NidavellirCustomAcc" then v:Destroy() end 
-                    end 
-                end
-            end
-            
-            if data.WeaponSkins then
-                ActiveWeaponSkins = data.WeaponSkins
-            else
-                ActiveWeaponSkins = {}
-            end
+            if CurrentAccArgs then applyAcc(Player.Character, CurrentAccArgs) end
+            if data.WeaponSkins then ActiveWeaponSkins = data.WeaponSkins else ActiveWeaponSkins = {} end
             updateGunButtonsUI()
-            
             if data.LevelHidden ~= nil then LevelHidden = data.LevelHidden applyLevelHide() end
             if data.UIHidden ~= nil then UIHidden = data.UIHidden applyUIHide() end
             if data.StatsSpoofed ~= nil then StatsSpoofed = data.StatsSpoofed applyStatsSpoof() end
             if data.ClockTime ~= nil then applyLighting(data.ClockTime) else applyLighting(nil) end
-            
             if data.IsHeadless ~= nil then IsHeadless = data.IsHeadless else IsHeadless = false end
             if data.IsLeftLegless ~= nil then IsLeftLegless = data.IsLeftLegless else IsLeftLegless = false end
-            
             if data.ActiveCustomKillSound ~= nil then ActiveCustomKillSound = data.ActiveCustomKillSound else ActiveCustomKillSound = "NONE" end
-            
             applyHeadless()
             applyLegless()
             applyKillSound()
@@ -1201,6 +1251,7 @@ if isfile and isfile(SaveFileName) then
     end)
 end
 loadSavedButtons()
+updateSoundUI()
 
 -- === KEYBINDS ===
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
