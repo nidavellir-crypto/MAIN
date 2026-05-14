@@ -594,7 +594,7 @@ RunService.Heartbeat:Connect(function(dt)
     end)
 end)
 
--- === ACCESSORY LOGIC ===
+-- === ACCESSORY LOGIC (Updated to support Fire Size and SecondaryColor) ===
 local function applyAcc(char, args)
     if not char or not args then return end
 
@@ -630,10 +630,10 @@ local function applyAcc(char, args)
 
         if fireData then
             local fire = Instance.new("Fire", handle)
-            fire.Size = 4
+            fire.Size = fireData.Size or 4
             fire.Heat = fireData.Heat or 5
             fire.Color = fireData.Color or Color3.fromRGB(52, 206, 236)
-            fire.SecondaryColor = fire.Color
+            fire.SecondaryColor = fireData.SecondaryColor or fire.Color
         end
 
         if mID == "24101267" or mID == "rbxassetid://24101267" then
@@ -777,11 +777,18 @@ local function d_Col(t) return t and Color3.new(t.r, t.g, t.b) or nil end
 local function s_Vec(v) return v and {x=v.X, y=v.Y, z=v.Z} or nil end
 local function d_Vec(t) return t and Vector3.new(t.x, t.y, t.z) or nil end
 
+-- Updated serialization to support Fire Size and SecondaryColor
 local function serializeAccArgs(args)
     if not args then return nil end
     local res = {args[1], args[2], args[3], args[4]}
     if args[5] then res[5] = s_Vec(args[5]) end
-    if args[6] then res[6] = {Heat = args[6].Heat, Color = s_Col(args[6].Color)} end
+    if args[6] then
+        local fd = {Heat = args[6].Heat}
+        if args[6].Color then fd.Color = s_Col(args[6].Color) end
+        if args[6].SecondaryColor then fd.SecondaryColor = s_Col(args[6].SecondaryColor) end
+        if args[6].Size then fd.Size = args[6].Size end
+        res[6] = fd
+    end
     return res
 end
 
@@ -789,7 +796,13 @@ local function deserializeAccArgs(t)
     if not t then return nil end
     local res = {t[1], t[2], t[3], t[4]}
     if t[5] then res[5] = d_Vec(t[5]) end
-    if t[6] then res[6] = {Heat = t[6].Heat, Color = d_Col(t[6].Color)} end
+    if t[6] then
+        local fd = {Heat = t[6].Heat or 5}
+        if t[6].Color then fd.Color = d_Col(t[6].Color) end
+        if t[6].SecondaryColor then fd.SecondaryColor = d_Col(t[6].SecondaryColor) end
+        if t[6].Size then fd.Size = t[6].Size end
+        res[6] = fd
+    end
     return res
 end
 
@@ -1070,7 +1083,7 @@ for soundKey, _ in pairs(CUSTOM_KILL_SOUNDS) do
 end
 updateSoundUI()
 
--- === ACCESSORIES TAB (ADJUSTED ACCORDING TO YOUR REQUEST) ===
+-- === ACCESSORIES TAB (with DOOMSEKKAR added) ===
 createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() IsHeadless = not IsHeadless applyHeadless() end)
 createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() IsLeftLegless = not IsLeftLegless applyLegless() end)
 
@@ -1094,12 +1107,29 @@ createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286
 createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 
--- === NEW ACCESSORIES WITH YOUR CUSTOM ADJUSTMENTS ===
+-- Adjusted accessories
 createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", 0.15, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", 0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
 createBtn("DARK CONJOUR", BordeauxColor, AccP, function() CurrentAccArgs = {"93129244", "93129336", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0, Vector3.new(2.5, 2.5, 2.5)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0, Vector3.new(3.0, 3.0, 3.0)} applyAcc(Player.Character, CurrentAccArgs) end)
+createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", 0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+
+-- New DOOMSEKKAR (same mesh as Ghosdeeri, different texture & green fire)
+createBtn("DOOMSEKKAR", BordeauxColor, AccP, function() 
+    CurrentAccArgs = {
+        "1474596", 
+        "132806413", 
+        -0.45, 0.05, 
+        Vector3.new(0.45, 0.45, 0.45), 
+        {
+            Color = Color3.fromRGB(0, 255, 0), 
+            SecondaryColor = Color3.fromRGB(0, 85, 0), 
+            Size = 5, 
+            Heat = 5
+        }
+    } 
+    applyAcc(Player.Character, CurrentAccArgs) 
+end)
 
 -- === GUNS TAB ===
 GunP.Size = UDim2.new(1, 0, 1, -40)
