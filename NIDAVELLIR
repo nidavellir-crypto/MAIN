@@ -14,7 +14,6 @@ local CurrentShirt = ""
 local CurrentPants = ""
 local CurrentSkinColor = nil
 local IsResetState = true
-local CurrentAccArgs = nil
 local LevelHidden = false
 local UIHidden = false
 local StatsSpoofed = false
@@ -25,7 +24,7 @@ local IsHeadless = false
 local IsLeftLegless = false
 
 -- Sound Toggles -----------------------------------------------------------------
-local ActiveCustomKillSound = "NONE"   -- "NONE", "OOF", "BELLS", "67", "RAKE", "WINDOWS", "WALLAHI", "RANDOM"
+local ActiveCustomKillSound = "NONE"
 
 local CUSTOM_KILL_SOUNDS = {
     OOF     = { Id = "rbxassetid://123386626402988",  Offset = 0.25 },
@@ -36,7 +35,6 @@ local CUSTOM_KILL_SOUNDS = {
     WALLAHI = { Id = "rbxassetid://105279752117918",  Offset = 0 },
 }
 
--- Helper list for random picking (auto‑updated with the table above)
 local RandomSoundKeys = {}
 for k, _ in pairs(CUSTOM_KILL_SOUNDS) do
     table.insert(RandomSoundKeys, k)
@@ -44,6 +42,10 @@ end
 
 local OriginalKillSoundId = ""
 local KillSoundConnections = {}
+
+-- === ACCESSORY STACKING SYSTEM ===
+-- Dictionary: key (string) -> { Args = table, Handle = Instance }
+local ActiveAccDict = {}
 
 -- Save Originals
 local OriginalShirt = ""
@@ -188,7 +190,7 @@ local function applyStatsSpoof()
     end
 end
 
--- === SOUND LOGIC (FIXED RANDOM MODE – EVERY KILL A NEW RANDOM SOUND) ===
+-- === SOUND LOGIC ===
 local function applyKillSound()
     pcall(function()
         local storage = ReplicatedStorage:WaitForChild("Storage", 3)
@@ -198,7 +200,6 @@ local function applyKillSound()
         local killSound = uiSounds:WaitForChild("kill_sound", 3)
         
         if killSound then
-            -- Clean up old hooks
             for _, conn in ipairs(KillSoundConnections) do
                 conn:Disconnect()
             end
@@ -210,7 +211,6 @@ local function applyKillSound()
 
             local isRandom = (ActiveCustomKillSound == "RANDOM")
 
-            -- Helper to set a random custom sound
             local function setRandomSound()
                 if #RandomSoundKeys == 0 then return end
                 local key = RandomSoundKeys[math.random(#RandomSoundKeys)]
@@ -220,24 +220,20 @@ local function applyKillSound()
             end
 
             if isRandom then
-                -- Set initial random sound
                 setRandomSound()
 
-                -- After the kill sound finishes, prepare a fresh random sound for next time
                 local endedConn = killSound.Ended:Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
                     setRandomSound()
                 end)
                 table.insert(KillSoundConnections, endedConn)
 
-                -- Also listen if the game changes the SoundId (e.g., resets to default).
-                -- If it's not already one of our custom sounds, replace it with a random one.
                 local sidConn = killSound:GetPropertyChangedSignal("SoundId"):Connect(function()
                     if ActiveCustomKillSound ~= "RANDOM" then return end
                     local currentId = killSound.SoundId
                     for _, info in pairs(CUSTOM_KILL_SOUNDS) do
                         if currentId == info.Id then
-                            return -- already a custom sound, leave it
+                            return
                         end
                     end
                     setRandomSound()
@@ -245,7 +241,6 @@ local function applyKillSound()
                 table.insert(KillSoundConnections, sidConn)
 
             elseif ActiveCustomKillSound ~= "NONE" then
-                -- Fixed custom sound (non-random)
                 local info = CUSTOM_KILL_SOUNDS[ActiveCustomKillSound]
                 if info then
                     killSound.SoundId = info.Id
@@ -268,7 +263,6 @@ local function applyKillSound()
                 end)
                 table.insert(KillSoundConnections, conn2)
             else
-                -- NONE mode
                 killSound.SoundId = OriginalKillSoundId
             end
         end
@@ -594,69 +588,92 @@ RunService.Heartbeat:Connect(function(dt)
     end)
 end)
 
--- === ACCESSORY LOGIC (Updated to support Fire Size and SecondaryColor) ===
-local function applyAcc(char, args)
+-- === ACCESSORY LOGIC (STACKING SUPPORT) ===
+local function addAccessory(key, args, char)
     if not char or not args then return end
+    -- Remove if already present
+    if ActiveAccDict[key] then
+        removeAccessory(key, char)
+    end
 
-    task.spawn(function()
-        local head = char:WaitForChild("Head", 5)
-        if not head then return end
-        
-        task.wait(0.8)
-        
-        for _, v in ipairs(char:GetChildren()) do 
-            if v.Name == "NidavellirCustomAcc" then v:Destroy() end 
-        end
+    local head = char:FindFirstChild("Head")
+    if not head then return end
 
-        local mID = args[1]
-        local tID = args[2]
-        local yOff = args[3] or 0
-        local zOff = args[4] or 0
-        local scale = args[5] or Vector3.new(1,1,1)
-        local fireData = args[6]
+    local mID = args[1]
+    local tID = args[2]
+    local yOff = args[3] or 0
+    local zOff = args[4] or 0
+    local scale = args[5] or Vector3.new(1,1,1)
+    local fireData = args[6]
 
-        local handle = Instance.new("Part")
-        handle.Name = "NidavellirCustomAcc"
-        handle.Size = Vector3.new(1, 1, 1)
-        handle.CanCollide = false
-        handle.Massless = true
-        handle.Parent = char
+    local handle = Instance.new("Part")
+    handle.Name = "NidavellirCustomAcc_" .. key
+    handle.Size = Vector3.new(1, 1, 1)
+    handle.CanCollide = false
+    handle.Massless = true
+    handle.Parent = char
 
-        local mesh = Instance.new("SpecialMesh", handle)
-        mesh.MeshType = Enum.MeshType.FileMesh
-        mesh.MeshId = mID:find("rbxassetid") and mID or "rbxassetid://" .. mID
-        mesh.TextureId = tID:find("rbxassetid") and tID or "rbxassetid://" .. tID
-        mesh.Scale = scale
+    local mesh = Instance.new("SpecialMesh", handle)
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = mID:find("rbxassetid") and mID or "rbxassetid://" .. mID
+    mesh.TextureId = tID:find("rbxassetid") and tID or "rbxassetid://" .. tID
+    mesh.Scale = scale
 
-        if fireData then
-            local fire = Instance.new("Fire", handle)
-            fire.Size = fireData.Size or 4
-            fire.Heat = fireData.Heat or 5
-            fire.Color = fireData.Color or Color3.fromRGB(52, 206, 236)
-            fire.SecondaryColor = fireData.SecondaryColor or fire.Color
-        end
+    if fireData then
+        local fire = Instance.new("Fire", handle)
+        fire.Size = fireData.Size or 4
+        fire.Heat = fireData.Heat or 5
+        fire.Color = fireData.Color or Color3.fromRGB(52, 206, 236)
+        fire.SecondaryColor = fireData.SecondaryColor or fire.Color
+    end
 
-        if mID == "24101267" or mID == "rbxassetid://24101267" then
-            local s1 = Instance.new("Sound", handle) s1.SoundId = "rbxassetid://24111685" s1.Volume = 1
-            local s2 = Instance.new("Sound", handle) s2.SoundId = "rbxassetid://24111782" s2.Volume = 1
-            local s3 = Instance.new("Sound", handle) s3.SoundId = "rbxassetid://24111798" s3.Volume = 1
-            task.spawn(function()
-                while handle and handle.Parent do
-                    local choice = math.random(1, 3)
-                    if choice == 1 then s1:Play() elseif choice == 2 then s2:Play() else s3:Play() end
-                    task.wait(math.random(3, 7))
-                end
-            end)
-        end
+    if mID == "24101267" or mID == "rbxassetid://24101267" then
+        local s1 = Instance.new("Sound", handle) s1.SoundId = "rbxassetid://24111685" s1.Volume = 1
+        local s2 = Instance.new("Sound", handle) s2.SoundId = "rbxassetid://24111782" s2.Volume = 1
+        local s3 = Instance.new("Sound", handle) s3.SoundId = "rbxassetid://24111798" s3.Volume = 1
+        task.spawn(function()
+            while handle and handle.Parent do
+                local choice = math.random(1, 3)
+                if choice == 1 then s1:Play() elseif choice == 2 then s2:Play() else s3:Play() end
+                task.wait(math.random(3, 7))
+            end
+        end)
+    end
 
-        local weld = Instance.new("Weld", handle)
-        weld.Part0 = handle
-        weld.Part1 = head
-        weld.C0 = CFrame.new(0, yOff, zOff)
-    end)
+    local weld = Instance.new("Weld", handle)
+    weld.Part0 = handle
+    weld.Part1 = head
+    weld.C0 = CFrame.new(0, yOff, zOff)
+
+    ActiveAccDict[key] = { Args = args, Handle = handle }
 end
 
--- === OUTFIT ENFORCER ===
+local function removeAccessory(key, char)
+    local entry = ActiveAccDict[key]
+    if entry and entry.Handle then
+        entry.Handle:Destroy()
+        ActiveAccDict[key] = nil
+    end
+end
+
+local function clearAllAccessories(char)
+    for key, _ in pairs(ActiveAccDict) do
+        removeAccessory(key, char)
+    end
+end
+
+-- Toggle function for UI buttons
+local function toggleAccessory(key, args)
+    local char = Player.Character
+    if not char then return end
+    if ActiveAccDict[key] then
+        removeAccessory(key, char)
+    else
+        addAccessory(key, args, char)
+    end
+end
+
+-- === OUTFIT ENFORCER (updated to not destroy stacked accessories) ===
 local function applyOutfit(sID, pID, resetMode, targetChar)
     OutfitToken = OutfitToken + 1
     local myToken = OutfitToken
@@ -682,7 +699,7 @@ local function applyOutfit(sID, pID, resetMode, targetChar)
 
                 local targetTrans = IsResetState and 0 or 1
                 for _, obj in ipairs(char:GetChildren()) do
-                    if obj.Name == "NidavellirCustomAcc" then continue end
+                    if obj.Name:find("NidavellirCustomAcc") then continue end  -- Keep our custom accessories
                     
                     if obj:IsA("BasePart") then
                         if obj.Name == "Head" then
@@ -744,11 +761,14 @@ local function applySkin(color, resetMode, targetChar)
     if charToUse then enforce(charToUse) end
 end
 
--- === RE-APPLY ON RESET ===
+-- === RE-APPLY ON RESET (re-adds all active accessories) ===
 local function onCharacterLoaded(char)
     if CurrentShirt ~= "" then applyOutfit(CurrentShirt, CurrentPants, IsResetState, char) end
     if CurrentSkinColor ~= nil then applySkin(CurrentSkinColor, false, char) end
-    if CurrentAccArgs then applyAcc(char, CurrentAccArgs) end
+    -- Re-add all active accessories
+    for key, entry in pairs(ActiveAccDict) do
+        addAccessory(key, entry.Args, char)
+    end
     applyLevelHide()
     applyUIHide()
     applyHeadless()
@@ -777,7 +797,6 @@ local function d_Col(t) return t and Color3.new(t.r, t.g, t.b) or nil end
 local function s_Vec(v) return v and {x=v.X, y=v.Y, z=v.Z} or nil end
 local function d_Vec(t) return t and Vector3.new(t.x, t.y, t.z) or nil end
 
--- Updated serialization to support Fire Size and SecondaryColor
 local function serializeAccArgs(args)
     if not args then return nil end
     local res = {args[1], args[2], args[3], args[4]}
@@ -930,13 +949,11 @@ ResetSkinBtn.Size = UDim2.new(1, -20, 0, 30) ResetSkinBtn.Position = UDim2.new(0
 local ResetTimeBtn = createBtn("RESET TIME CYCLE", DarkBordeaux, MainFrame, function() applyLighting(nil) end)
 ResetTimeBtn.Size = UDim2.new(1, -20, 0, 30) ResetTimeBtn.Position = UDim2.new(0, 10, 1, -85) ResetTimeBtn.Visible = false
 
-local ResetAccBtn = createBtn("REMOVE ACCESSORIES", DarkBordeaux, MainFrame, function()
-    CurrentAccArgs = nil
-    if Player.Character then for _, v in pairs(Player.Character:GetChildren()) do if v.Name == "NidavellirCustomAcc" then v:Destroy() end end end
+local ResetAccBtn = createBtn("REMOVE ALL ACCS", DarkBordeaux, MainFrame, function()
+    clearAllAccessories(Player.Character)
 end)
 ResetAccBtn.Size = UDim2.new(1, -20, 0, 30) ResetAccBtn.Position = UDim2.new(0, 10, 1, -85) ResetAccBtn.Visible = false
 
--- Random Sounds toggle footer button
 local RandomSoundsBtn = createBtn("RANDOM SOUNDS : OFF", DarkBordeaux, MainFrame, function()
     if ActiveCustomKillSound == "RANDOM" then
         ActiveCustomKillSound = "NONE"
@@ -1083,53 +1100,58 @@ for soundKey, _ in pairs(CUSTOM_KILL_SOUNDS) do
 end
 updateSoundUI()
 
--- === ACCESSORIES TAB (with DOOMSEKKAR added) ===
+-- === ACCESSORIES TAB (TOGGLEABLE STACKING) ===
+-- Helper: creates a toggle button for an accessory with given args and key
+local function createAccBtn(name, args)
+    createBtn(name, BordeauxColor, AccP, function()
+        toggleAccessory(name, args)
+    end)
+end
+
+-- Existing accessories (unchanged)
 createBtn("TOGGLE HEADLESS", BordeauxColor, AccP, function() IsHeadless = not IsHeadless applyHeadless() end)
 createBtn("TOGGLE LEFT LEGLESS", BordeauxColor, AccP, function() IsLeftLegless = not IsLeftLegless applyLegless() end)
 
-createBtn("CAT EARS", BordeauxColor, AccP, function() CurrentAccArgs = {"1374148", "413143035", -0.65, 0.15} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"215680403", "658646189", -1.3, 0, Vector3.new(1,1,1), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("RED FLAME HORNS", BordeauxColor, AccP, function() CurrentAccArgs = {"79855980527088", "120274046498591", -1.3, 0, Vector3.new(1.3, 1.3, 1.3), {Color = Color3.fromRGB(236, 139, 70), Heat = 9}} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("VOID CROWN", BordeauxColor, AccP, function() CurrentAccArgs = {"1125478", "1125479", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("GOLDEN CROWN", BordeauxColor, AccP, function() CurrentAccArgs = {"1078075", "1078071", -0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("PARTY HAT", BordeauxColor, AccP, function() CurrentAccArgs = {"1778999", "1778994", -1.1, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("ORANGE CW HP", BordeauxColor, AccP, function() CurrentAccArgs = {"187943426", "285584518", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("WHITE CW HP", BordeauxColor, AccP, function() CurrentAccArgs = {"187943426", "189255923", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("VALKYRIE", BordeauxColor, AccP, function() CurrentAccArgs = {"1365696", "1365693", -0.85, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("BLACKVALK", BordeauxColor, AccP, function() CurrentAccArgs = {"1365696", "124896442", -0.85, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("EERIE", BordeauxColor, AccP, function() CurrentAccArgs = {"1158007", "1158415", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("GHOSDEERI", BordeauxColor, AccP, function() CurrentAccArgs = {"1474596", "178262783", -0.45, 0.05, Vector3.new(0.45, 0.45, 0.45), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("BLIZZARIA", BordeauxColor, AccP, function() CurrentAccArgs = {"1158007", "106676124", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("RED VOID STAR", BordeauxColor, AccP, function() CurrentAccArgs = {"1125478", "1191134671", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("BLING BLING", BordeauxColor, AccP, function() CurrentAccArgs = {"6552775", "6552788", -1.1, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("SHADES", BordeauxColor, AccP, function() CurrentAccArgs = {"1577360", "1577349", -0.32, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("IRON BUCKET", BordeauxColor, AccP, function() CurrentAccArgs = {"1286103", "128154319", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("SKY FEDORA", BordeauxColor, AccP, function() CurrentAccArgs = {"1285237", "493450535", -0.65, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("CHICKEN SUIT", BordeauxColor, AccP, function() CurrentAccArgs = {"24101267", "24108148", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createAccBtn("CAT EARS", {"1374148", "413143035", -0.65, 0.15})
+createAccBtn("FLAME HORNS", {"215680403", "658646189", -1.3, 0, Vector3.new(1,1,1), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}})
+createAccBtn("RED FLAME HORNS", {"79855980527088", "120274046498591", -1.3, 0, Vector3.new(1.3, 1.3, 1.3), {Color = Color3.fromRGB(236, 139, 70), Heat = 9}})
+createAccBtn("VOID CROWN", {"1125478", "1125479", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)})
+createAccBtn("GOLDEN CROWN", {"1078075", "1078071", -0.45, 0})
+createAccBtn("PARTY HAT", {"1778999", "1778994", -1.1, 0})
+createAccBtn("ORANGE CW HP", {"187943426", "285584518", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)})
+createAccBtn("WHITE CW HP", {"187943426", "189255923", -0.35, 0, Vector3.new(0.40, 0.40, 0.40)})
+createAccBtn("VALKYRIE", {"1365696", "1365693", -0.85, 0})
+createAccBtn("BLACKVALK", {"1365696", "124896442", -0.85, 0})
+createAccBtn("EERIE", {"1158007", "1158415", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)})
+createAccBtn("GHOSDEERI", {"1474596", "178262783", -0.45, 0.05, Vector3.new(0.45, 0.45, 0.45), {Color = Color3.fromRGB(52, 206, 236), Heat = 5}})
+createAccBtn("BLIZZARIA", {"1158007", "106676124", -0.45, 0.18, Vector3.new(0.45, 0.45, 0.45)})
+createAccBtn("RED VOID STAR", {"1125478", "1191134671", -0.45, 0, Vector3.new(0.65, 0.65, 0.65)})
+createAccBtn("BLING BLING", {"6552775", "6552788", -1.1, 0})
+createAccBtn("SHADES", {"1577360", "1577349", -0.32, 0})
+createAccBtn("IRON BUCKET", {"1286103", "128154319", -0.65, 0})
+createAccBtn("SKY FEDORA", {"1285237", "493450535", -0.65, 0})
+createAccBtn("CHICKEN SUIT", {"24101267", "24108148", -0.35, 0})
 
 -- Adjusted accessories
-createBtn("SINISTER KING", BordeauxColor, AccP, function() CurrentAccArgs = {"40880006", "101837513", 0.15, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DARK PRESENCE", BordeauxColor, AccP, function() CurrentAccArgs = {"17425061", "20908573", 0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DARK CONJOUR", BordeauxColor, AccP, function() CurrentAccArgs = {"93129244", "93129336", -0.35, 0} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("ICE SKULL", BordeauxColor, AccP, function() CurrentAccArgs = {"6552202", "6552149", -0.35, 0, Vector3.new(3.0, 3.0, 3.0)} applyAcc(Player.Character, CurrentAccArgs) end)
-createBtn("DOOMS HELMET", BordeauxColor, AccP, function() CurrentAccArgs = {"13157704", "13157713", 0.45, 0} applyAcc(Player.Character, CurrentAccArgs) end)
+createAccBtn("SINISTER KING", {"40880006", "101837513", 0.15, 0})
+createAccBtn("DARK PRESENCE", {"17425061", "20908573", 0.45, 0})
+createAccBtn("DARK CONJOUR", {"93129244", "93129336", -0.35, 0})
+createAccBtn("ICE SKULL", {"6552202", "6552149", -0.35, 0, Vector3.new(3.0, 3.0, 3.0)})
+createAccBtn("DOOMS HELMET", {"13157704", "13157713", 0.45, 0})
 
 -- New DOOMSEKKAR (same mesh as Ghosdeeri, different texture & green fire)
-createBtn("DOOMSEKKAR", BordeauxColor, AccP, function() 
-    CurrentAccArgs = {
-        "1474596", 
-        "132806413", 
-        -0.45, 0.05, 
-        Vector3.new(0.45, 0.45, 0.45), 
-        {
-            Color = Color3.fromRGB(0, 255, 0), 
-            SecondaryColor = Color3.fromRGB(0, 85, 0), 
-            Size = 5, 
-            Heat = 5
-        }
-    } 
-    applyAcc(Player.Character, CurrentAccArgs) 
-end)
+createAccBtn("DOOMSEKKAR", {
+    "1474596", 
+    "132806413", 
+    -0.45, 0.05, 
+    Vector3.new(0.45, 0.45, 0.45), 
+    {
+        Color = Color3.fromRGB(0, 255, 0), 
+        SecondaryColor = Color3.fromRGB(0, 85, 0), 
+        Size = 5, 
+        Heat = 5
+    }
+})
 
 -- === GUNS TAB ===
 GunP.Size = UDim2.new(1, 0, 1, -40)
@@ -1215,8 +1237,14 @@ function loadSavedButtons()
         loadBtn.MouseButton1Click:Connect(function()
             applyOutfit(data.Shirt, data.Pants, false)
             if data.SkinColor then applySkin(d_Col(data.SkinColor), false) end
-            CurrentAccArgs = deserializeAccArgs(data.AccArgs)
-            if CurrentAccArgs then applyAcc(Player.Character, CurrentAccArgs) end
+            -- Clear current accessories and re-add from save
+            clearAllAccessories(Player.Character)
+            if data.Accessories then
+                for _, accData in ipairs(data.Accessories) do
+                    local args = deserializeAccArgs(accData.Args)
+                    addAccessory(accData.Key, args, Player.Character)
+                end
+            end
             if data.WeaponSkins then ActiveWeaponSkins = data.WeaponSkins else ActiveWeaponSkins = {} end
             updateGunButtonsUI()
             if data.LevelHidden ~= nil then LevelHidden = data.LevelHidden applyLevelHide() end
@@ -1252,12 +1280,17 @@ end
 local SaveBtn = createBtn("SAVE CURRENT LOADOUT", DarkBordeaux, SavedTab, function()
     local n = SaveNameBox.Text
     if n == "" then n = "LOADOUT " .. (#SavedOutfitsData + 1) end
+    -- Serialize active accessories
+    local accSave = {}
+    for key, entry in pairs(ActiveAccDict) do
+        table.insert(accSave, {Key = key, Args = serializeAccArgs(entry.Args)})
+    end
     table.insert(SavedOutfitsData, {
         Name = n,
         Shirt = CurrentShirt,
         Pants = CurrentPants,
         SkinColor = s_Col(CurrentSkinColor),
-        AccArgs = serializeAccArgs(CurrentAccArgs),
+        Accessories = accSave,
         WeaponSkins = ActiveWeaponSkins,
         LevelHidden = LevelHidden,
         UIHidden = UIHidden,
